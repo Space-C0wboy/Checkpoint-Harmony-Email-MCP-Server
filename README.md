@@ -98,6 +98,14 @@ project directory, you can drop the `--env` flags.
 
 See `docs/ENDPOINTS.md` for the full tool ↔ endpoint mapping.
 
+### Query tools (`events_query`, `entities_query`)
+
+- `events_query` **requires a date range** — include `startDate` (and usually
+  `endDate`) in `filters`, or the API returns a 500.
+- Both query tools return a **compact summary of up to `limit` records (default 25)**
+  to stay chat-friendly. Pass `full=true` for complete objects, and use the response
+  envelope's `scrollId` to page for more.
+
 ## Development
 
 `uv run pytest` runs the full suite (HTTP fully mocked with `respx`; no live calls).
