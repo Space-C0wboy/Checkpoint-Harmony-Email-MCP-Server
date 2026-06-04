@@ -1,0 +1,34 @@
+import pytest
+
+from checkpoint_harmony_mcp import server
+
+EXPECTED_TOOLS = {
+    "scopes_list",
+    "events_get_by_id", "events_query", "events_action", "events_get_task_status",
+    "entities_get_by_id", "entities_query", "entities_action",
+    "exceptions_list", "exceptions_get", "exceptions_create",
+    "exceptions_update", "exceptions_delete",
+}
+
+
+def _env(monkeypatch):
+    monkeypatch.setenv("CHECKPOINT_CLIENT_ID", "cid")
+    monkeypatch.setenv("CHECKPOINT_SECRET", "sec")
+    monkeypatch.setenv("CHECKPOINT_AUTH_URL", "https://gw.example/auth/external")
+    monkeypatch.setenv("CHECKPOINT_API_URL", "https://gw.example/app/hec-api")
+    monkeypatch.setenv("CHECKPOINT_SCOPE", "scope-1")
+
+
+def test_build_server_returns_fastmcp(monkeypatch):
+    _env(monkeypatch)
+    app = server.build_server()
+    assert app is not None
+    assert app.name == "checkpoint-harmony"
+
+
+@pytest.mark.xfail(reason="events/entities/exceptions tools added in Tasks 7-9", strict=False)
+async def test_all_tools_registered(monkeypatch):
+    _env(monkeypatch)
+    app = server.build_server()
+    names = {t.name for t in await app.list_tools()}
+    assert names == EXPECTED_TOOLS
