@@ -35,6 +35,7 @@ def apply_view(
     data = resp.get("responseData")
     if not isinstance(data, list) or not data:
         return resp
-    sliced = data[:limit]
+    # Clamp to avoid negative-index surprises (e.g. limit=-1 dropping the last record).
+    sliced = data[: max(limit, 0)]
     new_data = sliced if full else [compactor(r) for r in sliced]
     return {**resp, "responseData": new_data}

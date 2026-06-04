@@ -21,6 +21,12 @@ def test_limit_truncates():
     assert out["responseData"] == [{"id": 1}, {"id": 2}]
 
 
+def test_nonpositive_limit_returns_empty_not_negative_slice():
+    resp = {"responseData": [{"id": 1}, {"id": 2}, {"id": 3}]}
+    assert apply_view(resp, limit=0, full=True, compactor=_double)["responseData"] == []
+    assert apply_view(resp, limit=-1, full=True, compactor=_double)["responseData"] == []
+
+
 def test_full_returns_records_verbatim():
     resp = {"responseData": [{"id": 1, "big": "x"}]}
     out = apply_view(resp, limit=25, full=True, compactor=_double)
