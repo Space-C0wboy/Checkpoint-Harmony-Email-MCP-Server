@@ -56,3 +56,72 @@ async def test_action():
     assert out["responseData"][0]["taskId"] == 3
     body = route.calls.last.request.read()
     assert b"entityIds" in body and b"entityType" in body
+
+
+def _entity(eid):
+    return {
+        "saasInfo": {"saasActorPayload": {"full_name": "HEAVY"}},
+        "entityInfo": {
+            "entityId": eid, "saas": "office365_emails",
+            "saasEntityType": "office365_emails_email", "entityActionState": "quarantined",
+        },
+        "entityPayload": {
+            "subject": "Imaging Import Status", "fromEmail": "a@b.com",
+            "fromDomain": "b.com", "recipients": ["c@d.com"],
+            "received": "2026-05-27T23:59:50Z", "isQuarantined": True,
+            "SpfResult": "fail", "size": 16037, "attachments": ["HEAVY"],
+        },
+        "entitySecurityResult": {
+            "combinedVerdict": {"ap": "phishing"},
+            "ap": [{"payload": {"reasons": ["HEAVY-LIST"]}}],
+        },
+        "entityActions": [{"x": 1}], "entityAvailableActions": [],
+    }
+
+
+@respx.mock
+async def test_query_compacts_by_default():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(
+        return_value=httpx.Response(200, json={
+            "responseEnvelope": {"recordsNumber": 2, "scrollId": "S1"},
+            "responseData": [_entity("ENT1"), _entity("ENT2")],
+        })
+    )
+    out = await entities.entities_query(
+        _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"}
+    )
+    rec = out["responseData"][0]
+    assert rec["entityId"] == "ENT1"
+    assert rec["saasEntityType"] == "office365_emails_email"
+    assert rec["subject"] == "Imaging Import Status"
+    assert rec["combinedVerdict"] == {"ap": "phishing"}
+    assert "entitySecurityResult" not in rec and "ap" not in rec
+    assert "saasInfo" not in rec
+    assert out["responseEnvelope"]["scrollId"] == "S1"
+
+
+@respx.mock
+async def test_query_limit_truncates():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(
+        return_value=httpx.Response(200, json={
+            "responseData": [_entity("E1"), _entity("E2"), _entity("E3")]
+        })
+    )
+    out = await entities.entities_query(
+        _settings(), entity_filter={"saas": "x", "startDate": "y"}, limit=1
+    )
+    assert len(out["responseData"]) == 1
+
+
+@respx.mock
+async def test_query_full_returns_verbatim():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(
+        return_value=httpx.Response(200, json={"responseData": [_entity("E1")]})
+    )
+    out = await entities.entities_query(
+        _settings(), entity_filter={"saas": "x", "startDate": "y"}, full=True
+    )
+    assert out["responseData"][0]["entitySecurityResult"]["ap"][0]["payload"]["reasons"] == ["HEAVY-LIST"]
