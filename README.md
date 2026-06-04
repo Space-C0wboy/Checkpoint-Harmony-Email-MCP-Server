@@ -37,6 +37,63 @@ Copy `.env.example` to `.env` and set:
 - stdio (default): `uv run checkpoint-harmony-mcp`
 - HTTP: `uv run checkpoint-harmony-mcp --transport http --port 8765`
 
+## Use with an MCP client
+
+The server speaks MCP over **stdio**. Point your client at the `uv run` entry
+point and pass credentials either via the config's `env` block (shown below) or
+a `.env` file in the project directory.
+
+### Claude Desktop
+
+Edit `claude_desktop_config.json`:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "checkpoint-harmony": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/Checkpoint-Harmony-Email-MCP-Server",
+        "checkpoint-harmony-mcp"
+      ],
+      "env": {
+        "CHECKPOINT_CLIENT_ID": "your-client-id",
+        "CHECKPOINT_SECRET": "your-client-secret",
+        "CHECKPOINT_AUTH_URL": "https://cloudinfra-gw-us.portal.checkpoint.com/auth/external",
+        "CHECKPOINT_API_URL": "https://cloudinfra-gw-us.portal.checkpoint.com/app/hec-api",
+        "CHECKPOINT_SCOPE": "your-scope-id"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop, then confirm `checkpoint-harmony` appears in the
+tools menu. On Windows, use a full path with escaped backslashes for
+`--directory` (e.g. `C:\\Users\\you\\source\\repos\\Checkpoint-Harmony-Email-MCP-Server`).
+
+### Claude Code
+
+```bash
+claude mcp add checkpoint-harmony \
+  --env CHECKPOINT_CLIENT_ID=your-client-id \
+  --env CHECKPOINT_SECRET=your-client-secret \
+  --env CHECKPOINT_AUTH_URL=https://cloudinfra-gw-us.portal.checkpoint.com/auth/external \
+  --env CHECKPOINT_API_URL=https://cloudinfra-gw-us.portal.checkpoint.com/app/hec-api \
+  --env CHECKPOINT_SCOPE=your-scope-id \
+  -- uv run --directory /absolute/path/to/Checkpoint-Harmony-Email-MCP-Server checkpoint-harmony-mcp
+```
+
+Verify with `claude mcp list`. If you keep credentials in a `.env` file in the
+project directory, you can drop the `--env` flags.
+
+> Tip: run the `scopes_list` tool first to discover the value for
+> `CHECKPOINT_SCOPE`. Until it's set, only `scopes_list` will work.
+
 ## Tools
 
 See `docs/ENDPOINTS.md` for the full tool ↔ endpoint mapping.
