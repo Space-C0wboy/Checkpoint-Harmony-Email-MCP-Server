@@ -1,5 +1,3 @@
-import pytest
-
 from checkpoint_harmony_mcp import server
 
 EXPECTED_TOOLS = {
