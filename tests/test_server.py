@@ -26,7 +26,6 @@ def test_build_server_returns_fastmcp(monkeypatch):
     assert app.name == "checkpoint-harmony"
 
 
-@pytest.mark.xfail(reason="events/entities/exceptions tools added in Tasks 7-9", strict=False)
 async def test_all_tools_registered(monkeypatch):
     _env(monkeypatch)
     app = server.build_server()
