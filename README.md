@@ -102,3 +102,7 @@ See `docs/ENDPOINTS.md` for the full tool ↔ endpoint mapping.
 
 `uv run pytest` runs the full suite (HTTP fully mocked with `respx`; no live calls).
 `uv run ruff check .` lints.
+
+## License
+
+[MIT](LICENSE)
