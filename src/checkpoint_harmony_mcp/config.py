@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     )
 
     checkpoint_client_id: str
-    checkpoint_secret: str
+    checkpoint_secret: SecretStr
     checkpoint_auth_url: str
     checkpoint_api_url: str
     checkpoint_scope: str = ""

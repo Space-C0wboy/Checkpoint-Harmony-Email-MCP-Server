@@ -16,7 +16,7 @@ def _settings():
 
 
 def _auth():
-    respx.post(AUTH_URL).mock(
+    return respx.post(AUTH_URL).mock(
         return_value=httpx.Response(200, json={"success": True, "data": {"token": "tok"}})
     )
 
@@ -65,3 +65,27 @@ async def test_get_task_status():
     )
     out = await events.events_get_task_status(_settings(), task_id="T9")
     assert out["responseData"][0]["status"] == "completed"
+
+
+@respx.mock
+async def test_action_includes_scope_in_request_data():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/action/event").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    await events.events_action(
+        _settings(), event_ids=["E1"], event_action_name="quarantine", scope="sc1"
+    )
+    assert b"scope" in route.calls.last.request.read()
+
+
+@respx.mock
+async def test_shared_client_authenticates_once_across_calls():
+    from checkpoint_harmony_mcp.client import HarmonyClient
+    auth = _auth()
+    respx.get(f"{API_URL}/v1.0/event/E1").mock(return_value=httpx.Response(200, json={}))
+    respx.get(f"{API_URL}/v1.0/event/E2").mock(return_value=httpx.Response(200, json={}))
+    async with HarmonyClient(_settings()) as shared:
+        await events.events_get_by_id(_settings(), "E1", client=shared)
+        await events.events_get_by_id(_settings(), "E2", client=shared)
+    assert auth.call_count == 1

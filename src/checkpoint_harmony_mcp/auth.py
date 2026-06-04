@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import httpx
@@ -19,11 +20,16 @@ class TokenManager:
         self._http = http
         self._token: str | None = None
         self._expires_at: float = 0.0
+        self._lock = asyncio.Lock()
 
     async def get_token(self, force_refresh: bool = False) -> str:
         if not force_refresh and self._token and time.monotonic() < self._expires_at:
             return self._token
-        return await self._refresh()
+        async with self._lock:
+            # Re-check inside the lock: another coroutine may have refreshed.
+            if not force_refresh and self._token and time.monotonic() < self._expires_at:
+                return self._token
+            return await self._refresh()
 
     async def _refresh(self) -> str:
         try:
@@ -31,7 +37,7 @@ class TokenManager:
                 self._settings.checkpoint_auth_url,
                 json={
                     "clientId": self._settings.checkpoint_client_id,
-                    "accessKey": self._settings.checkpoint_secret,
+                    "accessKey": self._settings.checkpoint_secret.get_secret_value(),
                 },
                 timeout=self._settings.checkpoint_timeout,
             )

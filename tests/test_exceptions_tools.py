@@ -76,3 +76,15 @@ async def test_delete():
     )
     out = await exceptions.exceptions_delete(_settings(), exc_type="Whitelist", exc_id="X1")
     assert out["responseEnvelope"]["responseCode"] == 0
+
+
+@respx.mock
+async def test_create_sends_scope_query_param():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/exceptions/Whitelist").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    await exceptions.exceptions_create(
+        _settings(), exc_type="Whitelist", fields={"senderEmail": "a@b.com"}, scope="sc9"
+    )
+    assert route.calls.last.request.url.params["scope"] == "sc9"
