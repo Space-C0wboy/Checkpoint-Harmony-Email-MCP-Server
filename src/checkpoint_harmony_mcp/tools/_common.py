@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 from ..client import HarmonyClient
 from ..config import Settings
@@ -19,3 +19,22 @@ async def acquire_client(
     else:
         async with HarmonyClient(settings) as owned:
             yield owned
+
+
+def apply_view(
+    resp: dict[str, Any],
+    limit: int,
+    full: bool,
+    compactor: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    """Trim ``responseData`` to ``limit`` records and, unless ``full``, map each
+    record through ``compactor``. ``responseEnvelope`` and all other keys are
+    preserved. Returns ``resp`` unchanged when there is no non-empty list under
+    ``responseData``. Does not mutate the input.
+    """
+    data = resp.get("responseData")
+    if not isinstance(data, list) or not data:
+        return resp
+    sliced = data[:limit]
+    new_data = sliced if full else [compactor(r) for r in sliced]
+    return {**resp, "responseData": new_data}
