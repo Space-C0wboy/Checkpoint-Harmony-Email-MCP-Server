@@ -1,0 +1,64 @@
+import httpx
+import respx
+
+from checkpoint_harmony_mcp.client import HarmonyClient
+from checkpoint_harmony_mcp.config import Settings
+from checkpoint_harmony_mcp.tools._common import paginate, wait_for_task
+
+AUTH = "https://gw.example/auth/external"
+API = "https://gw.example/app/hec-api"
+
+
+def _settings():
+    return Settings(checkpoint_client_id="c", checkpoint_secret="s",
+                    checkpoint_auth_url=AUTH, checkpoint_api_url=API, checkpoint_scope="s1")
+
+
+def _auth():
+    respx.post(AUTH).mock(return_value=httpx.Response(200, json={"success": True, "data": {"token": "t"}}))
+
+
+@respx.mock
+async def test_paginate_aggregates_until_scroll_exhausted():
+    _auth()
+    respx.post(f"{API}/v1.0/search/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S1"}, "responseData": [{"id": 1}, {"id": 2}]}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S2"}, "responseData": [{"id": 3}]}),
+    ])
+    async with HarmonyClient(_settings()) as c:
+        records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=100)
+    assert [r["id"] for r in records] == [1, 2, 3]
+    assert truncated is False
+
+
+@respx.mock
+async def test_paginate_stops_at_cap_and_flags_truncated():
+    _auth()
+    respx.post(f"{API}/v1.0/search/query").mock(return_value=httpx.Response(
+        200, json={"responseEnvelope": {"recordsNumber": 9, "scrollId": "S1"}, "responseData": [{"id": 1}, {"id": 2}]}))
+    async with HarmonyClient(_settings()) as c:
+        records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
+    assert len(records) == 2
+    assert truncated is True
+
+
+@respx.mock
+async def test_wait_for_task_returns_on_completed():
+    _auth()
+    respx.get(f"{API}/v1.0/task/T1").mock(side_effect=[
+        httpx.Response(200, json={"responseData": {"actions": [{"action_status": "init"}]}}),
+        httpx.Response(200, json={"responseData": {"actions": [{"action_status": "completed", "action_message": "ok"}]}}),
+    ])
+    async with HarmonyClient(_settings()) as c:
+        out = await wait_for_task(c, "T1", timeout=5, interval=0)
+    assert out["status"] == "completed"
+
+
+@respx.mock
+async def test_wait_for_task_times_out():
+    _auth()
+    respx.get(f"{API}/v1.0/task/T1").mock(return_value=httpx.Response(200, json={"responseData": {"actions": [{"action_status": "init"}]}}))
+    async with HarmonyClient(_settings()) as c:
+        out = await wait_for_task(c, "T1", timeout=0, interval=0)
+    assert out["status"] == "inprogress"
+    assert out["timedOut"] is True

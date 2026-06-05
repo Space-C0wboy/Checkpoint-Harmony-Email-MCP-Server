@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from contextlib import asynccontextmanager
@@ -93,3 +94,51 @@ def normalize_task_status(task_json: dict[str, Any]) -> dict[str, Any]:
     inner = [{"name": a.get("action_name"), "status": a.get("action_status"), "message": a.get("action_message")} for a in actions]
     message = "; ".join(filter(None, (a.get("action_message") for a in actions)))
     return {"status": status, "message": message, "actions": inner, "raw": task_json}
+
+
+_MAX_RECORDS_CAP = 500
+
+
+async def paginate(client, path, request_data, max_records):
+    """POST {requestData: request_data} to ``path``, follow ``scrollId`` and aggregate
+    ``responseData`` up to ``max_records`` (clamped to 500). Returns
+    (records, last_envelope, truncated). ``truncated`` is True if the cap was hit while
+    more records remained."""
+    cap = max(1, min(int(max_records), _MAX_RECORDS_CAP))
+    records: list[Any] = []
+    envelope: dict[str, Any] = {}
+    rd = dict(request_data)
+    truncated = False
+    while True:
+        resp = await client.post(path, json={"requestData": rd})
+        envelope = resp.get("responseEnvelope") or {}
+        page = resp.get("responseData") or []
+        records.extend(page)
+        scroll = envelope.get("scrollId")
+        if len(records) >= cap:
+            more = bool(scroll) and len(page) > 0
+            records = records[:cap]
+            truncated = more
+            break
+        total = envelope.get("recordsNumber")
+        if isinstance(total, int) and len(records) >= total:
+            break
+        if not page or not scroll:
+            break
+        rd = {**request_data, "scrollId": scroll}
+    return records, envelope, truncated
+
+
+async def wait_for_task(client, task_id, timeout=60, interval=5):
+    """Poll /v1.0/task/{task_id}, normalizing status, until terminal or ``timeout``
+    seconds. Returns the normalized status dict; sets ``timedOut`` True on timeout."""
+    elapsed = 0
+    while True:
+        norm = normalize_task_status(await client.get(f"/v1.0/task/{task_id}"))
+        if norm["status"] in ("completed", "failed"):
+            return norm
+        if elapsed >= timeout:
+            norm["timedOut"] = True
+            return norm
+        await asyncio.sleep(interval)
+        elapsed += interval
