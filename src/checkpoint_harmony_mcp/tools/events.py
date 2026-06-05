@@ -3,7 +3,10 @@ from typing import Any
 from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
-from ._common import acquire_client, apply_view, clean_description, paginate, record_matches
+from ._common import (
+    acquire_client, apply_view, clean_description, normalize_task_status,
+    paginate, record_matches, wait_for_task,
+)
 
 _EVENT_FIELDS = (
     "eventId", "type", "severity", "state", "confidenceIndicator", "eventCreated",
@@ -126,27 +129,56 @@ async def events_action(
     event_action_name: str,
     event_action_param: str | None = None,
     scope: str | None = None,
+    wait: bool = True,
+    timeout: int = 60,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """Perform an action (e.g. quarantine, dismiss) on one or more security events."""
-    request_data: dict[str, Any] = {
-        "eventIds": event_ids,
-        "eventActionName": event_action_name,
-    }
+    """Perform an action (quarantine/restore) on one or more security events. By default
+    waits for the task to finish and returns {taskId, status, finalState, raw}; pass
+    wait=False for fire-and-forget (returns the raw POST result with taskId)."""
+    request_data: dict[str, Any] = {"eventIds": event_ids, "eventActionName": event_action_name}
     if event_action_param is not None:
         request_data["eventActionParam"] = event_action_param
     if scope is not None:
         request_data["scope"] = scope
     async with acquire_client(settings, client) as c:
-        return await c.post("/v1.0/action/event", json={"requestData": request_data})
+        resp = await c.post("/v1.0/action/event", json={"requestData": request_data})
+        if not wait:
+            return resp
+        first = (resp.get("responseData") or [{}])[0]
+        task_id = first.get("taskId")
+        entity_id = first.get("entityId")
+        if not task_id:
+            return resp
+        norm = await wait_for_task(c, task_id, timeout=timeout)
+        final_state = None
+        settled = False
+        if entity_id:
+            ent = await c.get(f"/v1.0/search/entity/{entity_id}")
+            row = (ent.get("responseData") or [{}])[0]
+            info = row.get("entityInfo") or {}
+            payload = row.get("entityPayload") or {}
+            final_state = {
+                "entityId": entity_id,
+                "isQuarantined": payload.get("isQuarantined"),
+                "isRestored": payload.get("isRestored"),
+                "entityActionState": info.get("entityActionState"),
+            }
+            settled = norm["status"] == "completed"
+        return {
+            "taskId": task_id, "status": norm["status"], "message": norm.get("message"),
+            "finalState": final_state, "finalStateSettled": settled,
+            "timedOut": norm.get("timedOut", False), "raw": resp,
+        }
 
 
 async def events_get_task_status(
     settings: Settings, task_id: str, client: HarmonyClient | None = None
 ) -> dict[str, Any]:
-    """Get the execution status of an action task created by events_action."""
+    """Get the normalized status of an action task (derived from inner action statuses;
+    the upstream outer status lags). Returns {status, message, actions, raw}."""
     async with acquire_client(settings, client) as c:
-        return await c.get(f"/v1.0/task/{task_id}")
+        return normalize_task_status(await c.get(f"/v1.0/task/{task_id}"))
 
 
 def register(app, settings: Settings, client: HarmonyClient | None = None) -> None:
@@ -185,17 +217,18 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="events_action")
     async def _events_action(
-        event_ids: list[str],
-        event_action_name: str,
-        event_action_param: str | None = None,
-        scope: str | None = None,
+        event_ids: list[str], event_action_name: str,
+        event_action_param: str | None = None, scope: str | None = None,
+        wait: bool = True, timeout: int = 60,
     ) -> dict[str, Any]:
-        """Perform an action (e.g. quarantine, dismiss) on one or more security events."""
+        """Quarantine/restore one or more events. Waits for completion by default and
+        returns {taskId, status, finalState}; wait=False for fire-and-forget."""
         return await events_action(
-            settings, event_ids, event_action_name, event_action_param, scope, client=client
+            settings, event_ids, event_action_name, event_action_param, scope,
+            wait=wait, timeout=timeout, client=client,
         )
 
     @app.tool(name="events_get_task_status")
     async def _events_get_task_status(task_id: str) -> dict[str, Any]:
-        """Get the execution status of an action task created by events_action."""
+        """Normalized status of an action task ({status, message, actions, raw})."""
         return await events_get_task_status(settings, task_id, client=client)

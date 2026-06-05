@@ -50,7 +50,7 @@ async def test_action():
         return_value=httpx.Response(200, json={"responseData": [{"taskId": 7}]})
     )
     out = await events.events_action(
-        _settings(), event_ids=["E1"], event_action_name="quarantine", event_action_param="spam"
+        _settings(), event_ids=["E1"], event_action_name="quarantine", event_action_param="spam", wait=False
     )
     assert out["responseData"][0]["taskId"] == 7
     body = route.calls.last.request.read()
@@ -61,10 +61,10 @@ async def test_action():
 async def test_get_task_status():
     _auth()
     respx.get(f"{API_URL}/v1.0/task/T9").mock(
-        return_value=httpx.Response(200, json={"responseData": [{"status": "completed"}]})
+        return_value=httpx.Response(200, json={"responseData": {"actions": [{"action_status": "completed"}]}})
     )
     out = await events.events_get_task_status(_settings(), task_id="T9")
-    assert out["responseData"][0]["status"] == "completed"
+    assert out["status"] == "completed"
 
 
 @respx.mock
@@ -206,3 +206,36 @@ async def test_events_find_requires_filter_and_date():
         await events.events_find(_settings(), start_date="2026-06-01T00:00:00Z")
     with pytest.raises(HarmonyError):
         await events.events_find(_settings(), sender="x@y.com")
+
+
+@respx.mock
+async def test_events_action_wait_returns_final_state():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/action/event").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"eventId": "E1", "entityId": "ENT1", "taskId": "T7"}]}))
+    respx.get(f"{API_URL}/v1.0/task/T7").mock(return_value=httpx.Response(
+        200, json={"responseData": {"actions": [{"action_status": "completed", "action_message": "ok"}]}}))
+    respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"entityInfo": {"entityId": "ENT1", "entityActionState": "quarantined"}, "entityPayload": {"isQuarantined": True, "isRestored": False}}]}))
+    out = await events.events_action(_settings(), event_ids=["E1"], event_action_name="quarantine", timeout=0)
+    assert out["status"] == "completed"
+    assert out["taskId"] == "T7"
+    assert out["finalState"]["isQuarantined"] is True
+
+
+@respx.mock
+async def test_events_action_no_wait_returns_taskid():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/action/event").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"eventId": "E1", "entityId": "ENT1", "taskId": "T7"}]}))
+    out = await events.events_action(_settings(), event_ids=["E1"], event_action_name="quarantine", wait=False)
+    assert out["responseData"][0]["taskId"] == "T7"
+
+
+@respx.mock
+async def test_events_get_task_status_normalized():
+    _auth()
+    respx.get(f"{API_URL}/v1.0/task/T7").mock(return_value=httpx.Response(
+        200, json={"responseData": {"actions": [{"action_status": "completed"}], "status": "inprogress"}}))
+    out = await events.events_get_task_status(_settings(), task_id="T7")
+    assert out["status"] == "completed"
