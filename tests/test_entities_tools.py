@@ -53,7 +53,7 @@ async def test_action():
     )
     out = await entities.entities_action(
         _settings(), entity_ids=["ENT1"], entity_type="office365_emails",
-        entity_action_name="quarantine", entity_action_param="malicious",
+        entity_action_name="quarantine", entity_action_param="malicious", wait=False,
     )
     assert out["responseData"][0]["taskId"] == 3
     body = route.calls.last.request.read()
@@ -179,3 +179,17 @@ async def test_entities_find_requires_filter_and_date():
         await entities.entities_find(_settings(), start_date="2026-06-01T00:00:00Z")
     with pytest.raises(HarmonyError):
         await entities.entities_find(_settings(), sender="a@b.com")
+
+
+@respx.mock
+async def test_entities_action_wait_returns_final_state():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/action/entity").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"entityId": "ENT1", "taskId": "T3"}]}))
+    respx.get(f"{API_URL}/v1.0/task/T3").mock(return_value=httpx.Response(
+        200, json={"responseData": {"actions": [{"action_status": "completed"}]}}))
+    respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"entityInfo": {"entityId": "ENT1", "entityActionState": "quarantined"}, "entityPayload": {"isQuarantined": True, "isRestored": False}}]}))
+    out = await entities.entities_action(_settings(), entity_ids=["ENT1"], entity_type="office365_emails_email", entity_action_name="quarantine", timeout=0)
+    assert out["status"] == "completed" and out["taskId"] == "T3"
+    assert out["finalState"]["isQuarantined"] is True

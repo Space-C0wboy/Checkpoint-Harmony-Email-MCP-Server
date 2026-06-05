@@ -3,7 +3,9 @@ from typing import Any
 from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
-from ._common import acquire_client, apply_view, paginate, record_matches
+from ._common import (
+    acquire_client, apply_view, paginate, record_matches, wait_for_task,
+)
 
 
 def _compact_entity(entity: dict[str, Any]) -> dict[str, Any]:
@@ -141,20 +143,47 @@ async def entities_action(
     entity_action_name: str,
     entity_action_param: str | None = None,
     scope: str | None = None,
+    wait: bool = True,
+    timeout: int = 60,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """Perform an action (e.g. quarantine, restore) on one or more secured entities."""
+    """Perform an action (quarantine/restore) on one or more secured entities. Waits for
+    the task by default and returns {taskId, status, finalState, raw}; wait=False returns
+    the raw POST result immediately."""
     request_data: dict[str, Any] = {
-        "entityIds": entity_ids,
-        "entityType": entity_type,
-        "entityActionName": entity_action_name,
+        "entityIds": entity_ids, "entityType": entity_type, "entityActionName": entity_action_name,
     }
     if entity_action_param is not None:
         request_data["entityActionParam"] = entity_action_param
     if scope is not None:
         request_data["scope"] = scope
     async with acquire_client(settings, client) as c:
-        return await c.post("/v1.0/action/entity", json={"requestData": request_data})
+        resp = await c.post("/v1.0/action/entity", json={"requestData": request_data})
+        if not wait:
+            return resp
+        first = (resp.get("responseData") or [{}])[0]
+        task_id = first.get("taskId")
+        entity_id = first.get("entityId")
+        if not task_id:
+            return resp
+        norm = await wait_for_task(c, task_id, timeout=timeout)
+        final_state = None
+        if entity_id:
+            ent = await c.get(f"/v1.0/search/entity/{entity_id}")
+            row = (ent.get("responseData") or [{}])[0]
+            info = row.get("entityInfo") or {}
+            payload = row.get("entityPayload") or {}
+            final_state = {
+                "entityId": entity_id,
+                "isQuarantined": payload.get("isQuarantined"),
+                "isRestored": payload.get("isRestored"),
+                "entityActionState": info.get("entityActionState"),
+            }
+        return {
+            "taskId": task_id, "status": norm["status"], "message": norm.get("message"),
+            "finalState": final_state, "finalStateSettled": norm["status"] == "completed",
+            "timedOut": norm.get("timedOut", False), "raw": resp,
+        }
 
 
 def register(app, settings: Settings, client: HarmonyClient | None = None) -> None:
@@ -195,19 +224,13 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="entities_action")
     async def _entities_action(
-        entity_ids: list[str],
-        entity_type: str,
-        entity_action_name: str,
-        entity_action_param: str | None = None,
-        scope: str | None = None,
+        entity_ids: list[str], entity_type: str, entity_action_name: str,
+        entity_action_param: str | None = None, scope: str | None = None,
+        wait: bool = True, timeout: int = 60,
     ) -> dict[str, Any]:
-        """Perform an action (e.g. quarantine, restore) on one or more secured entities."""
+        """Quarantine/restore one or more entities. Waits for completion by default and
+        returns {taskId, status, finalState}; wait=False for fire-and-forget."""
         return await entities_action(
-            settings,
-            entity_ids,
-            entity_type,
-            entity_action_name,
-            entity_action_param,
-            scope,
-            client=client,
+            settings, entity_ids, entity_type, entity_action_name, entity_action_param, scope,
+            wait=wait, timeout=timeout, client=client,
         )
