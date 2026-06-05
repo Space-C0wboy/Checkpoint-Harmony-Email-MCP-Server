@@ -1,7 +1,9 @@
 import httpx
+import pytest
 import respx
 
 from checkpoint_harmony_mcp.config import Settings
+from checkpoint_harmony_mcp.errors import HarmonyError
 from checkpoint_harmony_mcp.tools import entities
 
 AUTH_URL = "https://gw.example/auth/external"
@@ -149,3 +151,31 @@ async def test_entities_query_count_only():
     assert out["recordsNumber"] == 12
     assert out["histogram"]["phishing"] == 1 and out["histogram"]["clean"] == 1
     assert "responseData" not in out
+
+
+@respx.mock
+async def test_entities_find_by_message_id():
+    _auth()
+    e1 = _entity("E1"); e1["entityPayload"]["internetMessageId"] = "<abc@proton.me>"
+    e2 = _entity("E2"); e2["entityPayload"]["internetMessageId"] = "<other@x.com>"
+    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 2, "scrollId": ""}, "responseData": [e1, e2]}))
+    out = await entities.entities_find(_settings(), message_id="<ABC@proton.me>", start_date="2026-06-01T00:00:00Z")
+    assert len(out["matches"]) == 1 and out["matches"][0]["entityId"] == "E1"
+
+
+@respx.mock
+async def test_entities_find_by_sender_and_subject():
+    _auth()
+    e1 = _entity("E1")
+    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"scrollId": ""}, "responseData": [e1]}))
+    out = await entities.entities_find(_settings(), sender="A@B.com", subject_contains="imaging", start_date="2026-06-01T00:00:00Z")
+    assert len(out["matches"]) == 1
+
+
+async def test_entities_find_requires_filter_and_date():
+    with pytest.raises(HarmonyError):
+        await entities.entities_find(_settings(), start_date="2026-06-01T00:00:00Z")
+    with pytest.raises(HarmonyError):
+        await entities.entities_find(_settings(), sender="a@b.com")
