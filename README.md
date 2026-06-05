@@ -60,6 +60,10 @@ Exceptions, and Scopes — full parity with the v1.50 API.
 - **Action tools** (`events_action`, `entities_action`) wait for completion by default and
   return the final entity state; pass `wait=false` for fire-and-forget.
 
+> [!NOTE]
+> `events_query` and `events_find` require a date range — include `startDate` (and ideally
+> `endDate`). Without it the upstream API returns an opaque `500`.
+
 See [`docs/ENDPOINTS.md`](docs/ENDPOINTS.md) for the full tool ↔ endpoint mapping.
 
 ## Quick start
@@ -172,6 +176,10 @@ Infinity Portal. This server resolves it for you: leave `CHECKPOINT_SCOPE` **bla
 on first use, it calls `scopes_list` and uses your single scope automatically (logging it
 so you can pin it later). Set `CHECKPOINT_SCOPE` explicitly only if your key spans
 multiple scopes — the server will list the available values in an error if so.
+
+> [!TIP]
+> For a single-tenant key, just leave `CHECKPOINT_SCOPE` unset — there is nothing to look
+> up in the portal. Only multi-scope keys need it set explicitly.
 
 ## Example prompts
 
