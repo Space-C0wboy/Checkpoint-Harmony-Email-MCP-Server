@@ -37,7 +37,7 @@ async def test_query():
     route = respx.post(f"{API_URL}/v1.0/event/query").mock(
         return_value=httpx.Response(200, json={"responseData": []})
     )
-    out = await events.events_query(_settings(), filters={"severities": ["Critical"]})
+    out = await events.events_query(_settings(), filters={"startDate": "x", "severities": ["Critical"]})
     assert out == {"responseData": []}
     body = route.calls.last.request.read()
     assert b"requestData" in body and b"severities" in body
@@ -141,3 +141,45 @@ async def test_query_full_returns_verbatim():
     )
     out = await events.events_query(_settings(), filters={"startDate": "x"}, full=True)
     assert out["responseData"][0]["data"] == "HEAVY-BLOB"
+
+
+import pytest
+from checkpoint_harmony_mcp.errors import HarmonyError
+
+
+@respx.mock
+async def test_events_query_requires_date():
+    with pytest.raises(HarmonyError):
+        await events.events_query(_settings(), filters={"severities": ["Critical"]})
+
+
+@respx.mock
+async def test_events_query_max_records_paginates():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S1"}, "responseData": [_event("E1"), _event("E2")]}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S2"}, "responseData": [_event("E3")]}),
+    ])
+    out = await events.events_query(_settings(), filters={"startDate": "x"}, max_records=10)
+    assert len(out["responseData"]) == 3
+    assert "data" not in out["responseData"][0]
+
+
+@respx.mock
+async def test_events_query_count_only():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(
+        200, json={"responseEnvelope": {"recordsNumber": 42}, "responseData": [_event("E1"), {**_event("E2"), "type": "spam"}]}))
+    out = await events.events_query(_settings(), filters={"startDate": "x"}, count_only=True)
+    assert out["recordsNumber"] == 42
+    assert out["histogram"]["phishing"] == 1 and out["histogram"]["spam"] == 1
+    assert "responseData" not in out
+
+
+@respx.mock
+async def test_events_query_cleans_description():
+    _auth()
+    ev = {**_event("E1"), "description": 'User #{"label": "alice@x.com"} reported phishing'}
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={"responseData": [ev]}))
+    out = await events.events_query(_settings(), filters={"startDate": "x"})
+    assert out["responseData"][0]["description"] == "User alice@x.com reported phishing"
