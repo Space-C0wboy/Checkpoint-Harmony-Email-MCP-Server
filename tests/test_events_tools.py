@@ -183,3 +183,26 @@ async def test_events_query_cleans_description():
     respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={"responseData": [ev]}))
     out = await events.events_query(_settings(), filters={"startDate": "x"})
     assert out["responseData"][0]["description"] == "User alice@x.com reported phishing"
+
+
+@respx.mock
+async def test_events_find_by_sender():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 2, "scrollId": ""},
+        "responseData": [
+            {**_event("E1"), "senderAddress": "bad@x.com"},
+            {**_event("E2"), "senderAddress": "ok@y.com"},
+        ]}))
+    out = await events.events_find(_settings(), sender="BAD@x.com", start_date="2026-06-01T00:00:00Z")
+    assert len(out["matches"]) == 1
+    assert out["matches"][0]["eventId"] == "E1"
+    assert out["pagesScanned"] == 1 and out["scanCapHit"] is False
+
+
+@respx.mock
+async def test_events_find_requires_filter_and_date():
+    with pytest.raises(HarmonyError):
+        await events.events_find(_settings(), start_date="2026-06-01T00:00:00Z")
+    with pytest.raises(HarmonyError):
+        await events.events_find(_settings(), sender="x@y.com")

@@ -3,7 +3,7 @@ from typing import Any
 from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
-from ._common import acquire_client, apply_view, clean_description, paginate
+from ._common import acquire_client, apply_view, clean_description, paginate, record_matches
 
 _EVENT_FIELDS = (
     "eventId", "type", "severity", "state", "confidenceIndicator", "eventCreated",
@@ -62,6 +62,64 @@ async def events_query(
     return apply_view(resp, limit, full, _compact_event)
 
 
+async def events_find(
+    settings: Settings,
+    *,
+    sender: str | None = None,
+    text_contains: str | None = None,
+    entity_id: str | None = None,
+    event_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    max_pages: int = 20,
+    full: bool = False,
+    client: HarmonyClient | None = None,
+) -> dict[str, Any]:
+    """Find security events by sender / text_contains (matches description) / entity_id /
+    event_id within a date window, paginating internally. Returns
+    {matches, pagesScanned, scanCapHit, totalInWindow}. Requires start_date and >=1 filter."""
+    if not start_date:
+        raise HarmonyError("events_find requires start_date")
+    if not any([sender, text_contains, entity_id, event_id]):
+        raise HarmonyError("events_find requires at least one filter (sender/text_contains/entity_id/event_id)")
+    base = {"startDate": start_date}
+    if end_date:
+        base["endDate"] = end_date
+    matches: list[dict[str, Any]] = []
+    pages = 0
+    scan_cap_hit = False
+    total = None
+    rd = dict(base)
+    async with acquire_client(settings, client) as c:
+        while True:
+            resp = await c.post("/v1.0/event/query", json={"requestData": rd})
+            env = resp.get("responseEnvelope") or {}
+            if total is None:
+                total = env.get("recordsNumber")
+            page = resp.get("responseData") or []
+            for ev in page:
+                comps = []
+                if sender:
+                    comps.append((ev.get("senderAddress"), sender, "exact"))
+                if text_contains:
+                    comps.append((clean_description(ev.get("description")), text_contains, "contains"))
+                if entity_id:
+                    comps.append((ev.get("entityId"), entity_id, "exact"))
+                if event_id:
+                    comps.append((ev.get("eventId"), event_id, "exact"))
+                if record_matches(comps):
+                    matches.append(ev if full else _compact_event(ev))
+            pages += 1
+            scroll = env.get("scrollId")
+            if not page or not scroll:
+                break
+            if pages >= max_pages:
+                scan_cap_hit = True
+                break
+            rd = {**base, "scrollId": scroll}
+    return {"matches": matches, "pagesScanned": pages, "scanCapHit": scan_cap_hit, "totalInWindow": total}
+
+
 async def events_action(
     settings: Settings,
     event_ids: list[str],
@@ -108,6 +166,21 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
         return await events_query(
             settings, filters, limit=limit, full=full,
             max_records=max_records, count_only=count_only, client=client,
+        )
+
+    @app.tool(name="events_find")
+    async def _events_find(
+        sender: str | None = None, text_contains: str | None = None,
+        entity_id: str | None = None, event_id: str | None = None,
+        start_date: str | None = None, end_date: str | None = None,
+        max_pages: int = 20, full: bool = False,
+    ) -> dict[str, Any]:
+        """Find events by sender/text_contains/entity_id/event_id within a date window
+        (start_date required, >=1 filter). Returns matches + scan metadata."""
+        return await events_find(
+            settings, sender=sender, text_contains=text_contains, entity_id=entity_id,
+            event_id=event_id, start_date=start_date, end_date=end_date,
+            max_pages=max_pages, full=full, client=client,
         )
 
     @app.tool(name="events_action")
