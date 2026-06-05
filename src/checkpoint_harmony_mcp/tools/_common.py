@@ -160,7 +160,13 @@ async def aggregate_action_results(
     async def _one(row: dict[str, Any]) -> dict[str, Any]:
         tid = row.get("taskId")
         eid = row.get("entityId")
-        norm = await wait_for_task(client, tid, timeout=timeout) if tid else {"status": "failed", "message": "no taskId"}
+        if tid:
+            try:
+                norm = await wait_for_task(client, tid, timeout=timeout)
+            except Exception as exc:  # one task's poll error MUST NOT poison the whole batch
+                norm = {"status": "failed", "message": f"task poll failed: {exc}"}
+        else:
+            norm = {"status": "failed", "message": "no taskId"}
         final_state = None
         if eid:
             try:

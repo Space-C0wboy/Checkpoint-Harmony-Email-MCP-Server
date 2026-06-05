@@ -81,6 +81,21 @@ async def test_urlrep_invalid_type_raises():
         await sx.urlrep_list(_settings(), exception_type="not-a-real-type")
 
 
+@respx.mock
+async def test_urlrep_create_ignores_exception_type_in_fields():
+    """Caller-supplied exception_type in fields must not override the validated kwarg."""
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/sectool-exceptions/avanan_url").mock(
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+    await sx.urlrep_create(
+        _settings(), exception_type="allow-url",
+        fields={"exception_type": "block-url", "exception_str": "x.example", "comment": "c"},
+    )
+    import json as _json
+    body = _json.loads(route.calls.last.request.read())
+    assert body["requestData"]["exception_type"] == "allow-url"  # validated kwarg wins
+
+
 # ---------- DLP ----------
 
 @respx.mock

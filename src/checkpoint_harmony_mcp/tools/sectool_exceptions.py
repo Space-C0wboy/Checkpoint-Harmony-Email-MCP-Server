@@ -48,7 +48,9 @@ async def urlrep_create(
     may include ``comment``, ``entity_type``, ``entity_id``, ``file_name``,
     ``created_by_email``, ``is_exclusive``."""
     _validate_type("urlrep", exception_type, _URLREP_TYPES)
-    request_data = {"exception_type": exception_type, **fields}
+    # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
+    # cannot bypass _validate_type by overriding the path-bearing value.
+    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
     async with acquire_client(settings, client) as c:
         return await c.post(
             "/v1.0/sectool-exceptions/avanan_url",
@@ -64,7 +66,9 @@ async def urlrep_update(
     """Update a URL-reputation exception. ``fields`` must include ``exception_str`` and
     may include ``exception_payload`` (the conditions to overwrite)."""
     _validate_type("urlrep", exception_type, _URLREP_TYPES)
-    request_data = {"exception_type": exception_type, **fields}
+    # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
+    # cannot bypass _validate_type by overriding the path-bearing value.
+    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
     async with acquire_client(settings, client) as c:
         return await c.put(
             "/v1.0/sectool-exceptions/avanan_url",
@@ -117,7 +121,9 @@ async def dlp_create(
 ) -> dict[str, Any]:
     """Create a DLP exception. ``fields`` must include ``exception_str``."""
     _validate_type("dlp", exception_type, _DLP_TYPES)
-    request_data = {"exception_type": exception_type, **fields}
+    # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
+    # cannot bypass _validate_type by overriding the path-bearing value.
+    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
     async with acquire_client(settings, client) as c:
         return await c.post(
             "/v1.0/sectool-exceptions/avanan_dlp",
@@ -133,7 +139,9 @@ async def dlp_update(
     """Update a DLP exception. ``fields`` must include ``exception_str`` and may
     include ``exception_payload`` (the conditions to overwrite)."""
     _validate_type("dlp", exception_type, _DLP_TYPES)
-    request_data = {"exception_type": exception_type, **fields}
+    # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
+    # cannot bypass _validate_type by overriding the path-bearing value.
+    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
     async with acquire_client(settings, client) as c:
         return await c.put(
             "/v1.0/sectool-exceptions/avanan_dlp",

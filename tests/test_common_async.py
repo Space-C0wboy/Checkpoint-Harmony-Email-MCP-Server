@@ -113,3 +113,30 @@ async def test_aggregate_action_results_polls_each_task_and_fetches_entity_state
         )
     assert {t["entityId"] for t in out["tasks"]} == {"ENT1", "ENT2"}
     assert out["summary"] == {"total": 2, "completed": 1, "failed": 1, "inProgress": 0, "timedOut": 0}
+
+
+@respx.mock
+async def test_aggregate_survives_one_task_poll_failure():
+    """A failing task poll must not poison the rest of the batch."""
+    _auth()
+    # T1: polling returns HTTP 500 (mapped to ApiError); T2 completes cleanly.
+    respx.get(f"{API}/v1.0/task/T1").mock(return_value=httpx.Response(500, text="boom"))
+    respx.get(f"{API}/v1.0/task/T2").mock(return_value=httpx.Response(
+        200, json={"responseData": {"actions": [{"action_status": "completed"}]}}))
+    respx.get(f"{API}/v1.0/search/entity/ENT2").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"entityInfo": {"entityId": "ENT2", "entityActionState": "quarantined"},
+                                       "entityPayload": {"isQuarantined": True}}]}))
+    async with HarmonyClient(_settings()) as c:
+        out = await aggregate_action_results(
+            c,
+            [{"entityId": "ENT1", "taskId": "T1"}, {"entityId": "ENT2", "taskId": "T2"}],
+            timeout=0,
+        )
+    # Both rows present; T1 marked failed (with poll-error message), T2 completed.
+    by_id = {t["entityId"]: t for t in out["tasks"]}
+    assert by_id["ENT1"]["status"] == "failed"
+    assert "poll failed" in (by_id["ENT1"]["message"] or "").lower()
+    assert by_id["ENT2"]["status"] == "completed"
+    assert out["summary"]["total"] == 2
+    assert out["summary"]["completed"] == 1
+    assert out["summary"]["failed"] == 1
