@@ -86,6 +86,33 @@ cd Checkpoint-Harmony-Email-MCP-Server
 uv venv && uv pip install -e ".[dev]"
 ```
 
+### Getting an API key
+
+Generate an **account-scoped** Infinity Portal API key for the **Email & Collaboration**
+service. The easiest path also shows you the exact authentication URL for your region:
+
+1. In the **Harmony Email & Collaboration** console, confirm the correct **account /
+   company** is selected, then click the **Settings** gear next to the company name →
+   **API Keys**. (Equivalently: Infinity Portal **Global Settings → API Keys → New
+   Account API key**.)
+2. Click **New**, choose **Service: Email & Collaboration**, optionally set an expiration,
+   then **Create**.
+3. Copy the **Client ID**, **Secret Key**, and **Authentication URL** it displays — the
+   secret is shown only once. These map to `CHECKPOINT_CLIENT_ID`, `CHECKPOINT_SECRET`,
+   and `CHECKPOINT_AUTH_URL`. Set `CHECKPOINT_API_URL` to your region's gateway +
+   `/app/hec-api` (see Region gateways below).
+
+No role is requested for Email & Collaboration keys — they are granted Admin access scoped
+to that single service.
+
+> [!WARNING]
+> Use an **account** API key, not a **user** key. A user-scoped key (the
+> `/auth/external/user` endpoint) is bound to the user's home region and is **not** accepted
+> by the smart-api — it authenticates successfully but every data call returns an opaque
+> `500`. If you decode such a token you'll see `"authType": "EXTERNAL_USER"`; an account key
+> shows `"EXTERNAL"`. Always generate the key via *Global Settings → API Keys → New Account
+> API key* (or the Harmony console **gear → API Keys**).
+
 ### Configuration
 
 Copy `.env.example` to `.env` and set:
