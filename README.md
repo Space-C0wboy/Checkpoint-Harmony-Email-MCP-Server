@@ -2,7 +2,7 @@
 
 An MCP server exposing the Check Point Harmony Email & Collaboration smart-api
 (formerly Avanan): Security Events, Secured Entities, Exceptions, and Scopes.
-13 tools, full endpoint parity with the v1.50 API.
+15 tools, full endpoint parity with the v1.50 API.
 
 ## Configuration
 
@@ -14,13 +14,14 @@ Copy `.env.example` to `.env` and set:
 | `CHECKPOINT_SECRET` | yes | Infinity Portal API key Secret (accessKey) |
 | `CHECKPOINT_AUTH_URL` | yes | Region gateway + `/auth/external` |
 | `CHECKPOINT_API_URL` | yes | Region gateway + `/app/hec-api` |
-| `CHECKPOINT_SCOPE` | yes* | Scope sent on every API call; discover via `scopes_list` |
+| `CHECKPOINT_SCOPE` | no* | Auto-discovered when blank (single tenant); set explicitly only for multi-scope keys |
 | `CHECKPOINT_TIMEOUT` | no | Request timeout, default 30 |
 | `LOG_LEVEL` | no | default INFO |
 | `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | no | HTTP transport bind, defaults 127.0.0.1:8765 |
 
-\* The API requires the `scopes` header on every call. Leave blank only to call
-`scopes_list` for discovery.
+\* Optional: when blank the server auto-discovers the scope (single-tenant). Set it
+explicitly only if your key has access to multiple scopes; discover values via
+`scopes_list`.
 
 ### Region gateways
 - EU `https://cloudinfra-gw.portal.checkpoint.com`
@@ -105,6 +106,12 @@ See `docs/ENDPOINTS.md` for the full tool ↔ endpoint mapping.
 - Both query tools return a **compact summary of up to `limit` records (default 25)**
   to stay chat-friendly. Pass `full=true` for complete objects, and use the response
   envelope's `scrollId` to page for more.
+- `events_query`/`entities_query` accept `max_records` (auto-paginate, cap 500; sets
+  `truncated: true` if more remain) and `count_only` (returns `{recordsNumber, histogram}`).
+- Use `events_find` / `entities_find` to locate a specific message/event by sender,
+  recipient, subject, message-ID, or entity-ID within a date window.
+- `events_action` / `entities_action` **wait for completion by default** and return the
+  final state; pass `wait=false` for fire-and-forget. `exc_type` is case-insensitive.
 
 ## Development
 

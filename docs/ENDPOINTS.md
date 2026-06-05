@@ -11,11 +11,18 @@ is handled internally by the TokenManager and is not a tool.
 | events.py     | `events_query`           | POST   | `/v1.0/event/query`                           |
 | events.py     | `events_action`          | POST   | `/v1.0/action/event`                          |
 | events.py     | `events_get_task_status` | GET    | `/v1.0/task/{task_id}`                        |
+| events.py     | `events_find`            | POST   | `/v1.0/event/query` (client-side filtered)    |
 | entities.py   | `entities_get_by_id`     | GET    | `/v1.0/search/entity/{entity_id}`             |
 | entities.py   | `entities_query`         | POST   | `/v1.0/search/query`                          |
+| entities.py   | `entities_find`          | POST   | `/v1.0/search/query` (client-side filtered)   |
 | entities.py   | `entities_action`        | POST   | `/v1.0/action/entity`                         |
 | exceptions.py | `exceptions_list`        | GET    | `/v1.0/exceptions/{exc_type}`                 |
 | exceptions.py | `exceptions_get`         | GET    | `/v1.0/exceptions/{exc_type}/{exc_id}`        |
 | exceptions.py | `exceptions_create`      | POST   | `/v1.0/exceptions/{exc_type}`                 |
 | exceptions.py | `exceptions_update`      | PUT    | `/v1.0/exceptions/{exc_type}/{exc_id}`        |
 | exceptions.py | `exceptions_delete`      | POST   | `/v1.0/exceptions/{exc_type}/delete/{exc_id}` |
+
+15 tools total. `events_find` and `entities_find` are convenience tools that wrap
+`POST /v1.0/event/query` and `POST /v1.0/search/query` respectively, then filter the
+results client-side (by sender, recipient, subject, message-ID, or entity-ID) to locate
+a specific message/event within a date window. They do not map to a distinct endpoint.
