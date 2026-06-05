@@ -231,3 +231,30 @@ async def test_entities_action_bulk_returns_summary():
         _settings(), entity_ids=["ENT1", "ENT2"], entity_action_name="quarantine", timeout=0,
     )
     assert out["summary"]["completed"] == 2
+
+
+@respx.mock
+async def test_entities_download_returns_filename_and_base64():
+    _auth()
+    respx.get(f"{API_URL}/v1.0/download/entity/ENT1").mock(return_value=httpx.Response(
+        200, content=b"From: a@b\r\n\r\nhi",
+        headers={
+            "Content-Type": "application/message/rfc822",
+            "Content-Disposition": 'attachment; filename="ENT1.eml"',
+        },
+    ))
+    out = await entities.entities_download(_settings(), entity_id="ENT1")
+    assert out["filename"] == "ENT1.eml"
+    assert out["contentType"] == "application/message/rfc822"
+    assert out["sizeBytes"] == len(b"From: a@b\r\n\r\nhi")
+    import base64
+    assert base64.b64decode(out["base64"]) == b"From: a@b\r\n\r\nhi"
+
+
+@respx.mock
+async def test_entities_download_404_raises():
+    _auth()
+    respx.get(f"{API_URL}/v1.0/download/entity/missing").mock(return_value=httpx.Response(404, text="nope"))
+    from checkpoint_harmony_mcp.errors import HarmonyError, ApiError
+    with pytest.raises((HarmonyError, ApiError)):
+        await entities.entities_download(_settings(), entity_id="missing")

@@ -1,3 +1,5 @@
+import base64
+import re
 from typing import Any
 
 from ..client import HarmonyClient
@@ -7,6 +9,18 @@ from ._common import (
     acquire_client, apply_view, aggregate_action_results, paginate, record_matches,
     wait_for_task,
 )
+
+
+_FILENAME_RE = re.compile(r'filename\*?=("([^"]+)"|([^;]+))', re.IGNORECASE)
+
+
+def _parse_filename(disposition: str | None, entity_id: str) -> str:
+    if not disposition:
+        return f"{entity_id}.eml"
+    m = _FILENAME_RE.search(disposition)
+    if not m:
+        return f"{entity_id}.eml"
+    return (m.group(2) or m.group(3) or f"{entity_id}.eml").strip()
 
 
 def _compact_entity(entity: dict[str, Any]) -> dict[str, Any]:
@@ -33,6 +47,24 @@ async def entities_get_by_id(
     """Retrieve all details for a secured entity (email/file/message) by its entity ID."""
     async with acquire_client(settings, client) as c:
         return await c.get(f"/v1.0/search/entity/{entity_id}")
+
+
+async def entities_download(
+    settings: Settings, entity_id: str, original: bool = False,
+    client: HarmonyClient | None = None,
+) -> dict[str, Any]:
+    """Download a secured-entity email as RFC822 (.eml). Returns
+    ``{filename, contentType, sizeBytes, base64}``. ``original=True`` returns the
+    unmodified original message; default ``False`` adds Check Point visibility headers."""
+    params = {"original": "true"} if original else None
+    async with acquire_client(settings, client) as c:
+        content, headers = await c.get_bytes(f"/v1.0/download/entity/{entity_id}", params=params)
+    return {
+        "filename": _parse_filename(headers.get("Content-Disposition"), entity_id),
+        "contentType": headers.get("Content-Type", "application/octet-stream"),
+        "sizeBytes": len(content),
+        "base64": base64.b64encode(content).decode("ascii"),
+    }
 
 
 async def entities_query(
@@ -203,6 +235,12 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
     async def _entities_get_by_id(entity_id: str) -> dict[str, Any]:
         """Retrieve all details for a secured entity (email/file/message) by its entity ID."""
         return await entities_get_by_id(settings, entity_id, client=client)
+
+    @app.tool(name="entities_download")
+    async def _entities_download(entity_id: str, original: bool = False) -> dict[str, Any]:
+        """Download an entity (email) as .eml. Returns {filename, contentType, sizeBytes,
+        base64}. original=True for the unmodified message."""
+        return await entities_download(settings, entity_id, original=original, client=client)
 
     @app.tool(name="entities_query")
     async def _entities_query(

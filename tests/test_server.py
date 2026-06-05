@@ -7,6 +7,7 @@ EXPECTED_TOOLS = {
     "exceptions_list", "exceptions_get", "exceptions_create",
     "exceptions_update", "exceptions_delete",
     "events_find", "entities_find",
+    "entities_download",
 }
 
 
