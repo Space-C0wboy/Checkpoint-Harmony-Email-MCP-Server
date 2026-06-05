@@ -1,7 +1,9 @@
 import httpx
+import pytest
 import respx
 
 from checkpoint_harmony_mcp.config import Settings
+from checkpoint_harmony_mcp.errors import HarmonyError
 from checkpoint_harmony_mcp.tools import events
 
 AUTH_URL = "https://gw.example/auth/external"
@@ -141,10 +143,6 @@ async def test_query_full_returns_verbatim():
     )
     out = await events.events_query(_settings(), filters={"startDate": "x"}, full=True)
     assert out["responseData"][0]["data"] == "HEAVY-BLOB"
-
-
-import pytest
-from checkpoint_harmony_mcp.errors import HarmonyError
 
 
 @respx.mock

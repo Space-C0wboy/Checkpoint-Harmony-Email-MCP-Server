@@ -156,8 +156,10 @@ async def test_entities_query_count_only():
 @respx.mock
 async def test_entities_find_by_message_id():
     _auth()
-    e1 = _entity("E1"); e1["entityPayload"]["internetMessageId"] = "<abc@proton.me>"
-    e2 = _entity("E2"); e2["entityPayload"]["internetMessageId"] = "<other@x.com>"
+    e1 = _entity("E1")
+    e1["entityPayload"]["internetMessageId"] = "<abc@proton.me>"
+    e2 = _entity("E2")
+    e2["entityPayload"]["internetMessageId"] = "<other@x.com>"
     respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
         "responseEnvelope": {"recordsNumber": 2, "scrollId": ""}, "responseData": [e1, e2]}))
     out = await entities.entities_find(_settings(), message_id="<ABC@proton.me>", start_date="2026-06-01T00:00:00Z")
