@@ -144,3 +144,32 @@ async def wait_for_task(client, task_id, timeout=60, interval=5):
             return norm
         await asyncio.sleep(interval)
         elapsed += interval
+
+
+import time as _time_mod
+
+
+class TokenBucket:
+    """Async-safe token bucket. ``acquire()`` returns after a token is available;
+    sleeps proportionally when the bucket is empty."""
+
+    def __init__(self, rate_per_sec: float, burst: int):
+        self._rate = float(rate_per_sec)
+        self._capacity = float(burst)
+        self._tokens = float(burst)
+        self._last = _time_mod.monotonic()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            now = _time_mod.monotonic()
+            self._tokens = min(self._capacity, self._tokens + (now - self._last) * self._rate)
+            self._last = now
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+                return
+            wait = (1.0 - self._tokens) / self._rate
+        await asyncio.sleep(wait)
+        async with self._lock:
+            self._tokens = 0.0
+            self._last = _time_mod.monotonic()

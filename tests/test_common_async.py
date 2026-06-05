@@ -73,3 +73,17 @@ async def test_paginate_not_truncated_when_cap_equals_total():
         records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
     assert len(records) == 2
     assert truncated is False
+
+
+import time as _time
+from checkpoint_harmony_mcp.tools._common import TokenBucket
+
+
+async def test_token_bucket_throttles_to_rate():
+    # rate=2/sec, burst=2 -> 4 acquires should take at least ~1.0s (2 free, then 1 every 0.5s)
+    b = TokenBucket(rate_per_sec=2.0, burst=2)
+    start = _time.monotonic()
+    for _ in range(4):
+        await b.acquire()
+    elapsed = _time.monotonic() - start
+    assert elapsed >= 0.9, f"expected throttling, took only {elapsed:.2f}s"
