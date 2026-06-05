@@ -52,7 +52,22 @@ class TokenManager:
         if not token:
             raise AuthError("Auth response did not contain a token")
 
-        expires_in = int(data.get("expiresIn", _DEFAULT_EXPIRES_IN))
+        # Token TTL: prefer the documented `expiresIn` (seconds). Fall back to
+        # parsing `expires` (ISO 8601). If both are absent, default to 3600s.
+        # See Check Point Email Security API Reference Guide p. 7 (defers to the
+        # Portal Administration Guide for the auth response shape).
+        ttl = data.get("expiresIn")
+        if ttl is None and isinstance(data.get("expires"), str):
+            try:
+                from datetime import datetime, timezone
+                exp_iso = data["expires"].replace("Z", "+00:00")
+                ttl = int((datetime.fromisoformat(exp_iso) - datetime.now(timezone.utc)).total_seconds())
+            except Exception:
+                ttl = None
+        try:
+            ttl = int(ttl) if ttl is not None else _DEFAULT_EXPIRES_IN
+        except (TypeError, ValueError):
+            ttl = _DEFAULT_EXPIRES_IN
         self._token = token
-        self._expires_at = time.monotonic() + max(expires_in - _EXPIRY_SKEW, 0)
+        self._expires_at = time.monotonic() + max(ttl - _EXPIRY_SKEW, 0)
         return token

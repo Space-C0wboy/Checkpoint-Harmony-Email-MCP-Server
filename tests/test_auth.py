@@ -67,3 +67,25 @@ async def test_missing_token_raises():
     async with httpx.AsyncClient() as http:
         with pytest.raises(AuthError):
             await TokenManager(_settings(), http).get_token()
+
+
+@respx.mock
+async def test_uses_expires_iso_when_no_expiresin():
+    from datetime import datetime, timedelta, timezone
+    iso = (datetime.now(timezone.utc) + timedelta(seconds=120)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(
+        200, json={"success": True, "data": {"token": "abc", "expires": iso}}))
+    async with httpx.AsyncClient() as http:
+        tm = TokenManager(_settings(), http)
+        assert await tm.get_token() == "abc"
+        assert await tm.get_token() == "abc"  # cached
+
+
+@respx.mock
+async def test_default_ttl_when_no_expiry_fields():
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(
+        200, json={"success": True, "data": {"token": "abc"}}))
+    async with httpx.AsyncClient() as http:
+        tm = TokenManager(_settings(), http)
+        assert await tm.get_token() == "abc"
+        assert await tm.get_token() == "abc"
