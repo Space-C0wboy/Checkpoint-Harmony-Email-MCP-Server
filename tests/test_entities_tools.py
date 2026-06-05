@@ -125,3 +125,27 @@ async def test_query_full_returns_verbatim():
         _settings(), entity_filter={"saas": "x", "startDate": "y"}, full=True
     )
     assert out["responseData"][0]["entitySecurityResult"]["ap"][0]["payload"]["reasons"] == ["HEAVY-LIST"]
+
+
+@respx.mock
+async def test_entities_query_max_records_paginates():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S1"}, "responseData": [_entity("E1"), _entity("E2")]}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S2"}, "responseData": [_entity("E3")]}),
+    ])
+    out = await entities.entities_query(_settings(), entity_filter={"saas": "office365_emails", "startDate": "x"}, max_records=10)
+    assert len(out["responseData"]) == 3
+    assert "entitySecurityResult" not in out["responseData"][0]
+
+
+@respx.mock
+async def test_entities_query_count_only():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 12},
+        "responseData": [_entity("E1"), {**_entity("E2"), "entitySecurityResult": {"combinedVerdict": {"ap": "clean"}}}]}))
+    out = await entities.entities_query(_settings(), entity_filter={"saas": "x", "startDate": "y"}, count_only=True)
+    assert out["recordsNumber"] == 12
+    assert out["histogram"]["phishing"] == 1 and out["histogram"]["clean"] == 1
+    assert "responseData" not in out
