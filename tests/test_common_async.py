@@ -62,3 +62,14 @@ async def test_wait_for_task_times_out():
         out = await wait_for_task(c, "T1", timeout=0, interval=0)
     assert out["status"] == "inprogress"
     assert out["timedOut"] is True
+
+
+@respx.mock
+async def test_paginate_not_truncated_when_cap_equals_total():
+    _auth()
+    respx.post(f"{API}/v1.0/search/query").mock(return_value=httpx.Response(
+        200, json={"responseEnvelope": {"recordsNumber": 2, "scrollId": "S1"}, "responseData": [{"id": 1}, {"id": 2}]}))
+    async with HarmonyClient(_settings()) as c:
+        records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
+    assert len(records) == 2
+    assert truncated is False

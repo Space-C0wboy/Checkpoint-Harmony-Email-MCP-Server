@@ -92,8 +92,9 @@ claude mcp add checkpoint-harmony \
 Verify with `claude mcp list`. If you keep credentials in a `.env` file in the
 project directory, you can drop the `--env` flags.
 
-> Tip: run the `scopes_list` tool first to discover the value for
-> `CHECKPOINT_SCOPE`. Until it's set, only `scopes_list` will work.
+> Tip: leave `CHECKPOINT_SCOPE` blank — the server auto-discovers it for a
+> single-tenant key. Set it explicitly only if your key spans multiple scopes
+> (run `scopes_list` to see the available values).
 
 ## Tools
 

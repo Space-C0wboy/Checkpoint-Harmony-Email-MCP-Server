@@ -237,3 +237,17 @@ async def test_events_get_task_status_normalized():
         200, json={"responseData": {"actions": [{"action_status": "completed"}], "status": "inprogress"}}))
     out = await events.events_get_task_status(_settings(), task_id="T7")
     assert out["status"] == "completed"
+
+
+@respx.mock
+async def test_events_find_scan_cap_hit():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 999, "scrollId": "S1"},
+        "responseData": [{**_event("E1"), "senderAddress": "bad@x.com"}]}))
+    out = await events.events_find(
+        _settings(), sender="bad@x.com", start_date="2026-06-01T00:00:00Z", max_pages=1
+    )
+    assert out["scanCapHit"] is True
+    assert out["pagesScanned"] == 1
+    assert len(out["matches"]) == 1

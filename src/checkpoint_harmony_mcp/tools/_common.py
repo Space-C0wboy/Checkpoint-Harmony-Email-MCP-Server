@@ -115,12 +115,14 @@ async def paginate(client, path, request_data, max_records):
         page = resp.get("responseData") or []
         records.extend(page)
         scroll = envelope.get("scrollId")
-        if len(records) >= cap:
-            more = bool(scroll) and len(page) > 0
-            records = records[:cap]
-            truncated = more
-            break
         total = envelope.get("recordsNumber")
+        if len(records) >= cap:
+            # Only truncated if records beyond the cap actually remain. If the cap
+            # happens to equal the total available, nothing is dropped.
+            exhausted = isinstance(total, int) and cap >= total
+            truncated = bool(scroll) and len(page) > 0 and not exhausted
+            records = records[:cap]
+            break
         if isinstance(total, int) and len(records) >= total:
             break
         if not page or not scroll:
