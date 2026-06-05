@@ -79,21 +79,35 @@ async def test_delete():
 
 
 @respx.mock
-async def test_create_sends_scope_query_param():
-    _auth()
-    route = respx.post(f"{API_URL}/v1.0/exceptions/whitelist").mock(
-        return_value=httpx.Response(200, json={})
-    )
-    await exceptions.exceptions_create(
-        _settings(), exc_type="Whitelist", fields={"senderEmail": "a@b.com"}, scope="sc9"
-    )
-    assert route.calls.last.request.url.params["scope"] == "sc9"
-
-
-@respx.mock
 async def test_exc_type_case_insensitive():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/exceptions/blacklist").mock(
         return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
     await exceptions.exceptions_create(_settings(), exc_type="BlackList", fields={"senderEmail": "a@b.com"})
+    assert route.called
+
+
+@respx.mock
+async def test_exceptions_create_no_scope_in_query_or_body():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/exceptions/whitelist").mock(
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+    await exceptions.exceptions_create(
+        _settings(), exc_type="whitelist", fields={"senderEmail": "a@b.com"},
+    )
+    req = route.calls.last.request
+    assert "scope" not in dict(req.url.params)
+    import json as _json
+    body = _json.loads(req.read())
+    assert "scope" not in body["requestData"]
+
+
+@respx.mock
+async def test_spam_whitelist_path_passes_through():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/exceptions/spam_whitelist").mock(
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+    await exceptions.exceptions_create(
+        _settings(), exc_type="SPAM_WHITELIST", fields={"senderEmail": "a@b.com"},
+    )
     assert route.called
