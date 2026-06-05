@@ -26,3 +26,21 @@ is handled internally by the TokenManager and is not a tool.
 `POST /v1.0/event/query` and `POST /v1.0/search/query` respectively, then filter the
 results client-side (by sender, recipient, subject, message-ID, or entity-ID) to locate
 a specific message/event within a date window. They do not map to a distinct endpoint.
+
+## URL Reputation, DLP, and Entity Download
+
+| Tool                | HTTP | Path                                                              |
+|---------------------|------|-------------------------------------------------------------------|
+| `urlrep_list`       | GET  | `/v1.0/sectool-exceptions/avanan_url/exceptions/{exception_type}` |
+| `urlrep_get`        | GET  | `/v1.0/sectool-exceptions/avanan_url/exceptions/{exception_type}/{exception_str}` |
+| `urlrep_create`     | POST | `/v1.0/sectool-exceptions/avanan_url`                             |
+| `urlrep_update`     | PUT  | `/v1.0/sectool-exceptions/avanan_url`                             |
+| `urlrep_delete`     | POST | `/v1.0/sectool-exceptions/avanan_url/exceptions`                  |
+| `dlp_list`          | GET  | `/v1.0/sectool-exceptions/avanan_dlp/exceptions/{exception_type}` |
+| `dlp_get`           | GET  | `/v1.0/sectool-exceptions/avanan_dlp/exceptions/{exception_type}/{exception_str}` |
+| `dlp_create`        | POST | `/v1.0/sectool-exceptions/avanan_dlp`                             |
+| `dlp_update`        | PUT  | `/v1.0/sectool-exceptions/avanan_dlp`                             |
+| `dlp_delete`        | POST | `/v1.0/sectool-exceptions/avanan_dlp/exceptions`                  |
+| `entities_download` | GET  | `/v1.0/download/entity/{entity_id}?original={true\|false}`         |
+
+Total **26 tools**.

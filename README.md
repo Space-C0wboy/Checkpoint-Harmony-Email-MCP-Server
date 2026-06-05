@@ -7,8 +7,8 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the
 Check Point **Harmony Email & Collaboration** smart-api (formerly Avanan) to AI
-assistants. It provides **15 tools** across Security Events, Secured Entities,
-Exceptions, and Scopes — full parity with the v1.50 API.
+assistants. It provides **26 tools** across Security Events, Secured Entities,
+Exceptions, URL Reputation, DLP, and Scopes — full parity with the v1.50 API.
 
 > [!IMPORTANT]
 > **Unofficial project.** This is an independent, community-built MCP server developed
@@ -46,10 +46,12 @@ Exceptions, and Scopes — full parity with the v1.50 API.
 |------|-------|-------|
 | Scopes | 1 | `scopes_list` |
 | Security Events | 5 | `events_get_by_id`, `events_query`, `events_find`, `events_action`, `events_get_task_status` |
-| Secured Entities | 4 | `entities_get_by_id`, `entities_query`, `entities_find`, `entities_action` |
-| Exceptions | 5 | `exceptions_list`, `exceptions_get`, `exceptions_create`, `exceptions_update`, `exceptions_delete` |
+| Secured Entities | 5 | `entities_get_by_id`, `entities_query`, `entities_find`, `entities_action`, `entities_download` |
+| Exceptions (Anti-Phishing) | 5 | `exceptions_list`, `exceptions_get`, `exceptions_create`, `exceptions_update`, `exceptions_delete` |
+| URL Reputation | 5 | `urlrep_list`, `urlrep_get`, `urlrep_create`, `urlrep_update`, `urlrep_delete` |
+| DLP | 5 | `dlp_list`, `dlp_get`, `dlp_create`, `dlp_update`, `dlp_delete` |
 
-**15 tools total.** Highlights:
+**26 tools total.** Highlights:
 
 - **Query tools** (`events_query`, `entities_query`) return a compact summary of up to
   `limit` records (default 25). Use `max_records` (cap 500) to auto-paginate, `count_only`
@@ -59,6 +61,20 @@ Exceptions, and Scopes — full parity with the v1.50 API.
   sender, recipient, subject, message-ID, or entity-ID within a date window.
 - **Action tools** (`events_action`, `entities_action`) wait for completion by default and
   return the final entity state; pass `wait=false` for fire-and-forget.
+- **`exceptions_*`** (anti-phishing) types are `whitelist`, `blacklist`, and `spam_whitelist`
+  (case-insensitive). **URL-Reputation** exception types are `allow-url`, `allow-domain`,
+  `block-url`, `block-domain`. **DLP** exception types are `hash`, `text_content`,
+  `sender_email`, `recipient_email`.
+- **`entities_download`** returns the secured entity's message as an `.eml`
+  (base64-encoded for transport).
+- **Rate limits enforced client-side:** Anti-Phishing exception writes are paced to
+  **1 rps**; URL-Rep + DLP exception writes to **10 rps**, matching the API reference.
+- **`events_action` verbs:** `quarantine`, `restore`, `dismiss`, `severityChange`
+  (param `{"newSeverity": "Low|Medium|High|Highest"}`), `senttoadmin`.
+- **Server-side filters** for `entities_query` via `extended_filter`: each entry is
+  `{saasAttrName, saasAttrOp, saasAttrValue}`; operators are `is`, `contains`,
+  `startsWith`, `isEmpty`, `isNot`, `notContains`, `isNotEmpty`, `greaterThan`,
+  `lessThan`. Use dotted paths like `entityPayload.fromEmail`.
 
 > [!NOTE]
 > `events_query` and `events_find` require a date range — include `startDate` (and ideally

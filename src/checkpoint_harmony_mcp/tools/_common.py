@@ -1,10 +1,14 @@
 import asyncio
 import json
 import re
+import time as _time_mod
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable
 
 from ..config import Settings
+
+if TYPE_CHECKING:
+    from ..client import HarmonyClient
 
 
 @asynccontextmanager
@@ -190,9 +194,6 @@ async def aggregate_action_results(
         "timedOut": sum(1 for t in tasks if t["timedOut"]),
     }
     return {"tasks": tasks, "summary": summary}
-
-
-import time as _time_mod
 
 
 class TokenBucket:
