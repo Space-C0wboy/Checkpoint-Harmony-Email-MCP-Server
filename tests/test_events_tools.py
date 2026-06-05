@@ -70,18 +70,6 @@ async def test_get_task_status():
 
 
 @respx.mock
-async def test_action_includes_scope_in_request_data():
-    _auth()
-    route = respx.post(f"{API_URL}/v1.0/action/event").mock(
-        return_value=httpx.Response(200, json={})
-    )
-    await events.events_action(
-        _settings(), event_ids=["E1"], event_action_name="quarantine", scope="sc1"
-    )
-    assert b"scope" in route.calls.last.request.read()
-
-
-@respx.mock
 async def test_shared_client_authenticates_once_across_calls():
     from checkpoint_harmony_mcp.client import HarmonyClient
     auth = _auth()
@@ -251,3 +239,40 @@ async def test_events_find_scan_cap_hit():
     assert out["scanCapHit"] is True
     assert out["pagesScanned"] == 1
     assert len(out["matches"]) == 1
+
+
+@respx.mock
+async def test_action_body_uses_arrays():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/action/event").mock(
+        return_value=httpx.Response(200, json={"responseData": [{"eventId": "E1", "entityId": "ENT1", "taskId": "T7"}]}))
+    await events.events_action(
+        _settings(), event_ids=["E1"], event_action_name="quarantine", event_action_param="spam", wait=False,
+    )
+    import json as _json
+    body = _json.loads(route.calls.last.request.read())
+    assert body["requestData"]["eventActionName"] == ["quarantine"]
+    assert body["requestData"]["eventActionParam"] == ["spam"]
+    assert "scope" not in body["requestData"]
+
+
+@respx.mock
+async def test_events_action_bulk_returns_summary():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/action/event").mock(return_value=httpx.Response(200, json={
+        "responseData": [
+            {"eventId": "E1", "entityId": "ENT1", "taskId": "T1"},
+            {"eventId": "E2", "entityId": "ENT2", "taskId": "T2"},
+        ]}))
+    for tid in ("T1", "T2"):
+        respx.get(f"{API_URL}/v1.0/task/{tid}").mock(return_value=httpx.Response(
+            200, json={"responseData": {"actions": [{"action_status": "completed"}]}}))
+    for eid in ("ENT1", "ENT2"):
+        respx.get(f"{API_URL}/v1.0/search/entity/{eid}").mock(return_value=httpx.Response(
+            200, json={"responseData": [{"entityInfo": {"entityId": eid, "entityActionState": "quarantined"},
+                                          "entityPayload": {"isQuarantined": True}}]}))
+    out = await events.events_action(
+        _settings(), event_ids=["E1", "E2"], event_action_name="quarantine", timeout=0,
+    )
+    assert out["summary"]["total"] == 2 and out["summary"]["completed"] == 2
+    assert {t["entityId"] for t in out["tasks"]} == {"ENT1", "ENT2"}

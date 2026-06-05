@@ -4,8 +4,8 @@ from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
 from ._common import (
-    acquire_client, apply_view, clean_description, normalize_task_status,
-    paginate, record_matches, wait_for_task,
+    acquire_client, apply_view, clean_description, aggregate_action_results,
+    normalize_task_status, paginate, record_matches, wait_for_task,
 )
 
 _EVENT_FIELDS = (
@@ -127,25 +127,38 @@ async def events_action(
     settings: Settings,
     event_ids: list[str],
     event_action_name: str,
-    event_action_param: str | None = None,
-    scope: str | None = None,
+    event_action_param: Any = None,
     wait: bool = True,
     timeout: int = 60,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """Perform an action (quarantine/restore) on one or more security events. By default
-    waits for the task to finish and returns {taskId, status, finalState, raw}; pass
-    wait=False for fire-and-forget (returns the raw POST result with taskId)."""
-    request_data: dict[str, Any] = {"eventIds": event_ids, "eventActionName": event_action_name}
+    """Perform an action on one or more security events. Known verbs:
+    ``quarantine``, ``restore``, ``dismiss``, ``severityChange``, ``senttoadmin``.
+    For ``severityChange`` pass ``event_action_param`` as a dict matching
+    ``{"newSeverity": "Low|Medium|High|Highest"}`` per the API guide.
+
+    Waits by default. With multiple ``event_ids`` and ``wait=True`` returns
+    ``{tasks:[...], summary:{...}}``; single-ID + wait returns
+    ``{taskId, status, finalState, raw}``; ``wait=False`` returns the raw POST result."""
+    request_data: dict[str, Any] = {
+        "eventIds": event_ids,
+        "eventActionName": [event_action_name],  # API spec: array of string
+    }
     if event_action_param is not None:
-        request_data["eventActionParam"] = event_action_param
-    if scope is not None:
-        request_data["scope"] = scope
+        if isinstance(event_action_param, list):
+            request_data["eventActionParam"] = event_action_param
+        else:
+            request_data["eventActionParam"] = [event_action_param]
     async with acquire_client(settings, client) as c:
         resp = await c.post("/v1.0/action/event", json={"requestData": request_data})
         if not wait:
             return resp
-        first = (resp.get("responseData") or [{}])[0]
+        rows = resp.get("responseData") or []
+        if len(rows) > 1:
+            agg = await aggregate_action_results(c, rows, timeout=timeout)
+            agg["raw"] = resp
+            return agg
+        first = rows[0] if rows else {}
         task_id = first.get("taskId")
         entity_id = first.get("entityId")
         if not task_id:
@@ -218,13 +231,15 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
     @app.tool(name="events_action")
     async def _events_action(
         event_ids: list[str], event_action_name: str,
-        event_action_param: str | None = None, scope: str | None = None,
+        event_action_param: Any = None,
         wait: bool = True, timeout: int = 60,
     ) -> dict[str, Any]:
-        """Quarantine/restore one or more events. Waits for completion by default and
-        returns {taskId, status, finalState}; wait=False for fire-and-forget."""
+        """Act on one or more events. Verbs: quarantine, restore, dismiss, severityChange,
+        senttoadmin. For severityChange pass event_action_param as
+        {"newSeverity": "Low|Medium|High|Highest"}. Waits for completion by default
+        (multi-ID returns tasks+summary; single-ID returns finalState). wait=false for fire-and-forget."""
         return await events_action(
-            settings, event_ids, event_action_name, event_action_param, scope,
+            settings, event_ids, event_action_name, event_action_param,
             wait=wait, timeout=timeout, client=client,
         )
 
