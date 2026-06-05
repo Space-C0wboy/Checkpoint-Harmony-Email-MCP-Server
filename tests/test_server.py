@@ -8,6 +8,8 @@ EXPECTED_TOOLS = {
     "exceptions_update", "exceptions_delete",
     "events_find", "entities_find",
     "entities_download",
+    "urlrep_list", "urlrep_get", "urlrep_create", "urlrep_update", "urlrep_delete",
+    "dlp_list", "dlp_get", "dlp_create", "dlp_update", "dlp_delete",
 }
 
 
