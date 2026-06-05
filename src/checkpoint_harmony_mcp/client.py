@@ -7,12 +7,13 @@ import httpx
 
 from .auth import TokenManager
 from .config import Settings
-from .errors import ApiError, RateLimitError
+from .errors import ApiError, HarmonyError, RateLimitError
 
 logger = logging.getLogger("checkpoint_harmony_mcp.client")
 
 # Number of automatic retries on HTTP 429 before giving up.
 _MAX_429_RETRIES = 2
+_SCOPES_PATH = "/v1.0/scopes"
 
 
 class HarmonyClient:
@@ -27,6 +28,7 @@ class HarmonyClient:
         self._http = http or httpx.AsyncClient(base_url=settings.checkpoint_api_url)
         self._owns_http = http is None
         self._auth = TokenManager(settings, self._http)
+        self._scope: str | None = settings.checkpoint_scope or None
 
     async def __aenter__(self) -> "HarmonyClient":
         return self
@@ -51,12 +53,35 @@ class HarmonyClient:
     async def delete(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return await self._request("DELETE", path, params=params)
 
-    def _headers(self, token: str) -> dict[str, str]:
+    def _headers(self, token: str, scope: str) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {token}",
             "x-av-req-id": str(uuid.uuid4()),
-            "scopes": self._settings.checkpoint_scope,
+            "scopes": scope,
         }
+
+    async def _ensure_scope(self) -> str:
+        if self._scope:
+            return self._scope
+        self._scope = await self._discover_scope()
+        return self._scope
+
+    async def _discover_scope(self) -> str:
+        token = await self._auth.get_token()
+        resp = await self._http.request(
+            "GET", _SCOPES_PATH,
+            headers={"Authorization": f"Bearer {token}", "x-av-req-id": str(uuid.uuid4()), "scopes": ""},
+            timeout=self._settings.checkpoint_timeout,
+        )
+        if resp.status_code >= 400:
+            raise ApiError(f"Scope discovery failed {resp.status_code}", status_code=resp.status_code)
+        data = (resp.json() or {}).get("responseData") or []
+        if len(data) == 1:
+            logger.info("Auto-discovered Harmony scope: %s", data[0])
+            return data[0]
+        if not data:
+            raise HarmonyError("No scopes available for these credentials")
+        raise HarmonyError("Multiple scopes available; set CHECKPOINT_SCOPE to one of: " + ", ".join(data))
 
     async def _request(
         self,
@@ -66,6 +91,7 @@ class HarmonyClient:
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        scope = "" if path.rstrip("/") == _SCOPES_PATH else await self._ensure_scope()
         attempted_refresh = False
         for attempt in range(_MAX_429_RETRIES + 1):
             token = await self._auth.get_token()
@@ -74,7 +100,7 @@ class HarmonyClient:
                 path,
                 params=params,
                 json=json,
-                headers=self._headers(token),
+                headers=self._headers(token, scope),
                 timeout=self._settings.checkpoint_timeout,
             )
             logger.info("%s %s -> %s", method, path, resp.status_code)
