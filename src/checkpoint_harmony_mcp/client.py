@@ -76,12 +76,14 @@ class HarmonyClient:
         if resp.status_code >= 400:
             raise ApiError(f"Scope discovery failed {resp.status_code}", status_code=resp.status_code)
         data = (resp.json() or {}).get("responseData") or []
-        if len(data) == 1:
-            logger.info("Auto-discovered Harmony scope: %s", data[0])
-            return data[0]
         if not data:
             raise HarmonyError("No scopes available for these credentials")
-        raise HarmonyError("Multiple scopes available; set CHECKPOINT_SCOPE to one of: " + ", ".join(data))
+        joined = ",".join(data)
+        if len(data) == 1:
+            logger.info("Auto-discovered Harmony scope: %s", joined)
+        else:
+            logger.info("Auto-discovered %d Harmony scopes (joined): %s", len(data), joined)
+        return joined
 
     async def _request(
         self,

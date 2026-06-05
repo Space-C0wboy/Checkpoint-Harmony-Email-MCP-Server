@@ -45,16 +45,6 @@ async def test_single_scope_auto_discovered_and_cached():
 
 
 @respx.mock
-async def test_multiple_scopes_raises():
-    _auth()
-    respx.get(f"{API}/v1.0/scopes").mock(return_value=httpx.Response(200, json={"responseData": ["a", "b"]}))
-    async with HarmonyClient(_settings()) as c:
-        with pytest.raises(HarmonyError) as exc:
-            await c.get("/v1.0/event/E1")
-    assert "a" in str(exc.value) and "b" in str(exc.value)
-
-
-@respx.mock
 async def test_scopes_endpoint_does_not_recurse():
     _auth()
     scopes_route = respx.get(f"{API}/v1.0/scopes").mock(return_value=httpx.Response(200, json={"responseData": ["a", "b"]}))
@@ -63,3 +53,24 @@ async def test_scopes_endpoint_does_not_recurse():
     assert out["responseData"] == ["a", "b"]
     assert scopes_route.call_count == 1
     assert scopes_route.calls.last.request.headers["scopes"] == ""
+
+
+@respx.mock
+async def test_multiple_scopes_joined_as_csv():
+    _auth()
+    scopes_route = respx.get(f"{API}/v1.0/scopes").mock(
+        return_value=httpx.Response(200, json={"responseData": ["alpha", "beta"]}))
+    ev = respx.get(f"{API}/v1.0/event/E1").mock(return_value=httpx.Response(200, json={"ok": True}))
+    async with HarmonyClient(_settings()) as c:
+        await c.get("/v1.0/event/E1")
+    assert ev.calls.last.request.headers["scopes"] == "alpha,beta"
+    assert scopes_route.call_count == 1
+
+
+@respx.mock
+async def test_zero_scopes_still_raises():
+    _auth()
+    respx.get(f"{API}/v1.0/scopes").mock(return_value=httpx.Response(200, json={"responseData": []}))
+    async with HarmonyClient(_settings()) as c:
+        with pytest.raises(HarmonyError):
+            await c.get("/v1.0/event/E1")
