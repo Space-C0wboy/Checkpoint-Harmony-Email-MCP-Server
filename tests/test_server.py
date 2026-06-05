@@ -6,6 +6,7 @@ EXPECTED_TOOLS = {
     "entities_get_by_id", "entities_query", "entities_action",
     "exceptions_list", "exceptions_get", "exceptions_create",
     "exceptions_update", "exceptions_delete",
+    "events_find", "entities_find",
 }
 
 
