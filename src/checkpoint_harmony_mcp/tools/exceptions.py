@@ -9,6 +9,10 @@ def _scope_params(scope: str | None) -> dict[str, Any] | None:
     return {"scope": scope} if scope is not None else None
 
 
+def _norm_type(exc_type: str) -> str:
+    return exc_type.strip().lower()
+
+
 async def exceptions_list(
     settings: Settings,
     exc_type: str,
@@ -16,7 +20,8 @@ async def exceptions_list(
     scope: str | None = None,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """List exceptions of a given type (e.g. 'Whitelist' / 'Blacklist')."""
+    """List exceptions of a given type (e.g. 'whitelist' / 'blacklist' (case-insensitive))."""
+    exc_type = _norm_type(exc_type)
     params: dict[str, Any] = {}
     if exc_id is not None:
         params["exc_id"] = exc_id
@@ -34,6 +39,7 @@ async def exceptions_get(
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Get a single exception by type and ID."""
+    exc_type = _norm_type(exc_type)
     async with acquire_client(settings, client) as c:
         return await c.get(
             f"/v1.0/exceptions/{exc_type}/{exc_id}", params=_scope_params(scope)
@@ -49,6 +55,7 @@ async def exceptions_create(
 ) -> dict[str, Any]:
     """Create an exception. `fields` holds the documented body fields (senderEmail,
     senderDomain, attachmentMd5, subject, comment, actionNeeded, matching flags, etc.)."""
+    exc_type = _norm_type(exc_type)
     async with acquire_client(settings, client) as c:
         return await c.post(
             f"/v1.0/exceptions/{exc_type}",
@@ -66,6 +73,7 @@ async def exceptions_update(
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Update an existing exception by type and ID."""
+    exc_type = _norm_type(exc_type)
     async with acquire_client(settings, client) as c:
         return await c.put(
             f"/v1.0/exceptions/{exc_type}/{exc_id}",
@@ -82,6 +90,7 @@ async def exceptions_delete(
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Delete an exception by type and ID."""
+    exc_type = _norm_type(exc_type)
     async with acquire_client(settings, client) as c:
         return await c.post(
             f"/v1.0/exceptions/{exc_type}/delete/{exc_id}", params=_scope_params(scope)
@@ -93,7 +102,7 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
     async def _exceptions_list(
         exc_type: str, exc_id: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        """List exceptions of a given type (e.g. 'Whitelist' / 'Blacklist')."""
+        """List exceptions of a given type (e.g. 'whitelist' / 'blacklist' (case-insensitive))."""
         return await exceptions_list(settings, exc_type, exc_id, scope, client=client)
 
     @app.tool(name="exceptions_get")

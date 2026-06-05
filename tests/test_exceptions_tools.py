@@ -24,7 +24,7 @@ def _auth():
 @respx.mock
 async def test_list():
     _auth()
-    respx.get(f"{API_URL}/v1.0/exceptions/Whitelist").mock(
+    respx.get(f"{API_URL}/v1.0/exceptions/whitelist").mock(
         return_value=httpx.Response(200, json={"responseData": []})
     )
     out = await exceptions.exceptions_list(_settings(), exc_type="Whitelist")
@@ -34,7 +34,7 @@ async def test_list():
 @respx.mock
 async def test_get():
     _auth()
-    respx.get(f"{API_URL}/v1.0/exceptions/Whitelist/X1").mock(
+    respx.get(f"{API_URL}/v1.0/exceptions/whitelist/X1").mock(
         return_value=httpx.Response(200, json={"responseData": [{"id": "X1"}]})
     )
     out = await exceptions.exceptions_get(_settings(), exc_type="Whitelist", exc_id="X1")
@@ -44,7 +44,7 @@ async def test_get():
 @respx.mock
 async def test_create():
     _auth()
-    route = respx.post(f"{API_URL}/v1.0/exceptions/Whitelist").mock(
+    route = respx.post(f"{API_URL}/v1.0/exceptions/whitelist").mock(
         return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
     )
     out = await exceptions.exceptions_create(
@@ -58,7 +58,7 @@ async def test_create():
 @respx.mock
 async def test_update():
     _auth()
-    route = respx.put(f"{API_URL}/v1.0/exceptions/Whitelist/X1").mock(
+    route = respx.put(f"{API_URL}/v1.0/exceptions/whitelist/X1").mock(
         return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
     )
     out = await exceptions.exceptions_update(
@@ -71,7 +71,7 @@ async def test_update():
 @respx.mock
 async def test_delete():
     _auth()
-    respx.post(f"{API_URL}/v1.0/exceptions/Whitelist/delete/X1").mock(
+    respx.post(f"{API_URL}/v1.0/exceptions/whitelist/delete/X1").mock(
         return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
     )
     out = await exceptions.exceptions_delete(_settings(), exc_type="Whitelist", exc_id="X1")
@@ -81,10 +81,19 @@ async def test_delete():
 @respx.mock
 async def test_create_sends_scope_query_param():
     _auth()
-    route = respx.post(f"{API_URL}/v1.0/exceptions/Whitelist").mock(
+    route = respx.post(f"{API_URL}/v1.0/exceptions/whitelist").mock(
         return_value=httpx.Response(200, json={})
     )
     await exceptions.exceptions_create(
         _settings(), exc_type="Whitelist", fields={"senderEmail": "a@b.com"}, scope="sc9"
     )
     assert route.calls.last.request.url.params["scope"] == "sc9"
+
+
+@respx.mock
+async def test_exc_type_case_insensitive():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/exceptions/blacklist").mock(
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+    await exceptions.exceptions_create(_settings(), exc_type="BlackList", fields={"senderEmail": "a@b.com"})
+    assert route.called
