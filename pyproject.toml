@@ -5,12 +5,30 @@ description = "MCP server for the Check Point Harmony Email & Collaboration API"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Kierston Grantham", email = "Space-C0wboy@users.noreply.github.com" }]
+keywords = ["mcp", "checkpoint", "harmony", "avanan", "email-security", "security"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Communications :: Email",
+]
 dependencies = [
-    "fastmcp>=2.0.0",
+    "fastmcp>=3,<4",
     "httpx>=0.27",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server"
+Repository = "https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server"
+Issues = "https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server/issues"
 
 [project.scripts]
 checkpoint-harmony-mcp = "checkpoint_harmony_mcp.server:main"
