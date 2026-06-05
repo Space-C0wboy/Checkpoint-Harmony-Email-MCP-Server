@@ -10,26 +10,35 @@ Check Point **Harmony Email & Collaboration** smart-api (formerly Avanan) to AI
 assistants. It provides **15 tools** across Security Events, Secured Entities,
 Exceptions, and Scopes — full parity with the v1.50 API.
 
-> **Unofficial / community project.** Not affiliated with, endorsed by, or supported by
-> Check Point Software Technologies. "Check Point", "Harmony", and "Avanan" are
-> trademarks of their respective owner.
+> [!IMPORTANT]
+> **Unofficial project.** This is an independent, community-built MCP server developed
+> against Check Point's published API documentation. It is **not** an official Check Point
+> product and is not affiliated with, endorsed by, or supported by Check Point Software
+> Technologies. "Check Point", "Harmony", and "Avanan" are trademarks of Check Point
+> Software Technologies. For official support of the Harmony Email & Collaboration platform
+> itself, contact Check Point directly.
 
-## Important notices
-
-> **Beta software.** APIs and tool shapes may change. Validate against a non-production
-> scope before relying on it.
-
-> **Destructive capabilities.** `events_action` and `entities_action` **quarantine and
-> restore real email**, and the `exceptions_*` tools **modify allow/block lists**. An AI
-> assistant invoking these changes your live mail flow.
-
-Recommended security posture:
-
-- Test against a lab / non-production scope before using it on production mail.
-- Treat the Client ID and Secret like passwords — never commit `.env`; prefer per-call
-  scoping where possible.
-- Review any state-changing action (quarantine, restore, block, allow) before approving it.
-- Keep the HTTP transport bound to localhost (the default) — do not expose it to a network.
+> [!WARNING]
+> **Beta software — not yet recommended for production environments.** This project is
+> under active development. The tool surface and individual tool body shapes may still
+> change between minor versions, and not every endpoint has been exhaustively exercised
+> against every tenant configuration. Use against a lab or non-production scope until
+> you're confident in the behavior for your use case.
+>
+> **This server can also perform destructive actions against your Harmony environment.**
+> Tools can quarantine and restore real email and modify allow/block-list exceptions. A
+> hallucinated tool argument from your AI assistant could alter your mail flow in ways
+> that affect email security.
+>
+> **Recommended posture:**
+> - Try the server against a non-production or lab scope first.
+> - Use a Check Point API key scoped to the **minimum permissions** your use case requires.
+> - Review every destructive tool call before allowing execution. Claude Desktop requires
+>   tool-call approval by default — keep that enabled.
+> - Treat the API key (Client ID + Secret) with the same care as portal admin credentials,
+>   because functionally it is one.
+> - The HTTP transport binds to `127.0.0.1` by default. Do not expose it to the public
+>   internet without adding authentication.
 
 ## Tools
 
