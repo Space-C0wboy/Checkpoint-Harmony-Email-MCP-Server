@@ -146,6 +146,52 @@ async def wait_for_task(client, task_id, timeout=60, interval=5):
         elapsed += interval
 
 
+async def aggregate_action_results(
+    client, rows: list[dict[str, Any]], timeout: int
+) -> dict[str, Any]:
+    """For a bulk-action ``responseData`` (list of {entityId, taskId, ...}), poll each
+    task to terminal status in parallel and fetch each entity's post-action state.
+    Returns ``{"tasks": [...], "summary": {total, completed, failed, inProgress, timedOut}}``."""
+
+    async def _one(row: dict[str, Any]) -> dict[str, Any]:
+        tid = row.get("taskId")
+        eid = row.get("entityId")
+        norm = await wait_for_task(client, tid, timeout=timeout) if tid else {"status": "failed", "message": "no taskId"}
+        final_state = None
+        if eid:
+            try:
+                ent = await client.get(f"/v1.0/search/entity/{eid}")
+                ent_row = (ent.get("responseData") or [{}])[0]
+                info = ent_row.get("entityInfo") or {}
+                payload = ent_row.get("entityPayload") or {}
+                final_state = {
+                    "entityId": eid,
+                    "isQuarantined": payload.get("isQuarantined"),
+                    "isRestored": payload.get("isRestored"),
+                    "entityActionState": info.get("entityActionState"),
+                }
+            except Exception:  # never let one entity fetch poison the whole result
+                final_state = None
+        return {
+            "entityId": eid,
+            "taskId": tid,
+            "status": norm.get("status"),
+            "message": norm.get("message"),
+            "finalState": final_state,
+            "timedOut": norm.get("timedOut", False),
+        }
+
+    tasks = await asyncio.gather(*[_one(r) for r in rows])
+    summary = {
+        "total": len(tasks),
+        "completed": sum(1 for t in tasks if t["status"] == "completed"),
+        "failed": sum(1 for t in tasks if t["status"] == "failed"),
+        "inProgress": sum(1 for t in tasks if t["status"] == "inprogress"),
+        "timedOut": sum(1 for t in tasks if t["timedOut"]),
+    }
+    return {"tasks": tasks, "summary": summary}
+
+
 import time as _time_mod
 
 

@@ -87,3 +87,29 @@ async def test_token_bucket_throttles_to_rate():
         await b.acquire()
     elapsed = _time.monotonic() - start
     assert elapsed >= 0.9, f"expected throttling, took only {elapsed:.2f}s"
+
+
+from checkpoint_harmony_mcp.tools._common import aggregate_action_results
+
+
+@respx.mock
+async def test_aggregate_action_results_polls_each_task_and_fetches_entity_state():
+    _auth()
+    respx.get(f"{API}/v1.0/task/T1").mock(return_value=httpx.Response(
+        200, json={"responseData": {"actions": [{"action_status": "completed"}]}}))
+    respx.get(f"{API}/v1.0/task/T2").mock(return_value=httpx.Response(
+        200, json={"responseData": {"actions": [{"action_status": "failed", "action_message": "denied"}]}}))
+    respx.get(f"{API}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"entityInfo": {"entityId": "ENT1", "entityActionState": "quarantined"},
+                                       "entityPayload": {"isQuarantined": True, "isRestored": False}}]}))
+    respx.get(f"{API}/v1.0/search/entity/ENT2").mock(return_value=httpx.Response(
+        200, json={"responseData": [{"entityInfo": {"entityId": "ENT2", "entityActionState": "links_replaced"},
+                                       "entityPayload": {"isQuarantined": False, "isRestored": False}}]}))
+    async with HarmonyClient(_settings()) as c:
+        out = await aggregate_action_results(
+            c,
+            [{"entityId": "ENT1", "taskId": "T1"}, {"entityId": "ENT2", "taskId": "T2"}],
+            timeout=0,
+        )
+    assert {t["entityId"] for t in out["tasks"]} == {"ENT1", "ENT2"}
+    assert out["summary"] == {"total": 2, "completed": 1, "failed": 1, "inProgress": 0, "timedOut": 0}
