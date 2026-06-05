@@ -1,4 +1,7 @@
 from checkpoint_harmony_mcp.tools._common import apply_view
+from checkpoint_harmony_mcp.tools._common import (
+    clean_description, record_matches, normalize_task_status,
+)
 
 
 def _double(r):
@@ -45,3 +48,30 @@ def test_does_not_mutate_input():
     resp = {"responseData": [{"id": 1, "big": "x"}]}
     apply_view(resp, 25, False, _double)
     assert resp["responseData"][0] == {"id": 1, "big": "x"}
+
+
+def test_clean_description_extracts_labels():
+    raw = 'User #{"display": "embedded-entity", "label": "alice@x.com"} reported #{"label": "Phishing", "entity_type": "scan"}'
+    assert clean_description(raw) == "User alice@x.com reported Phishing"
+
+
+def test_clean_description_passes_plain_text():
+    assert clean_description("no tokens here") == "no tokens here"
+    assert clean_description(None) is None
+
+
+def test_record_matches_and_semantics():
+    assert record_matches([("Hello World", "hello", "contains"), ("A@B.com", "a@b.com", "exact")])
+    assert not record_matches([("Hello", "bye", "contains")])
+    assert record_matches([(["x@y.com", "z@y.com"], "Z@Y.com", "in")])
+    assert not record_matches([(["x@y.com"], "q@y.com", "in")])
+
+
+def test_normalize_task_status():
+    inprog = {"responseData": {"actions": [{"action_name": "Q", "action_status": "completed", "action_message": "ok"}], "status": "inprogress"}}
+    assert normalize_task_status(inprog)["status"] == "completed"
+    failed = {"responseData": {"actions": [{"action_status": "completed"}, {"action_status": "failed"}]}}
+    assert normalize_task_status(failed)["status"] == "failed"
+    pending = {"responseData": {"actions": [{"action_status": "init"}]}}
+    assert normalize_task_status(pending)["status"] == "inprogress"
+    assert normalize_task_status(inprog)["raw"] is inprog
