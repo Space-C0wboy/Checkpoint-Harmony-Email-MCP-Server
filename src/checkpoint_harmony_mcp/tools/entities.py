@@ -4,7 +4,8 @@ from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
 from ._common import (
-    acquire_client, apply_view, paginate, record_matches, wait_for_task,
+    acquire_client, apply_view, aggregate_action_results, paginate, record_matches,
+    wait_for_task,
 )
 
 
@@ -46,6 +47,12 @@ async def entities_query(
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Search secured entities. `entity_filter` requires `saas` and `startDate`.
+    `extended_filter` is an opaque list of {saasAttrName, saasAttrOp, saasAttrValue}
+    objects pushed to the API for server-side filtering. Documented operators:
+    is, contains, startsWith, isEmpty, isNot, notContains, isNotEmpty, greaterThan,
+    lessThan. `saasAttrName` uses dotted paths like 'entityPayload.fromEmail',
+    'entityPayload.subject', 'entityPayload.attachmentCount'.
+
     `max_records` (cap 500) auto-paginates and governs the returned count (overrides
     `limit`). `count_only=True` returns {recordsNumber, histogram}. `full=True` for raw."""
     request_data: dict[str, Any] = {"entityFilter": entity_filter}
@@ -139,29 +146,34 @@ async def entities_find(
 async def entities_action(
     settings: Settings,
     entity_ids: list[str],
-    entity_type: str,
     entity_action_name: str,
-    entity_action_param: str | None = None,
-    scope: str | None = None,
+    entity_action_param: Any = None,
     wait: bool = True,
     timeout: int = 60,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """Perform an action (quarantine/restore) on one or more secured entities. Waits for
-    the task by default and returns {taskId, status, finalState, raw}; wait=False returns
-    the raw POST result immediately."""
+    """Perform an action (e.g. quarantine, restore) on one or more secured entities.
+    Waits by default. Multi-ID + wait returns ``{tasks, summary}``; single-ID + wait
+    returns ``{taskId, status, finalState, raw}``."""
     request_data: dict[str, Any] = {
-        "entityIds": entity_ids, "entityType": entity_type, "entityActionName": entity_action_name,
+        "entityIds": entity_ids,
+        "entityActionName": [entity_action_name],  # API spec: array
     }
     if entity_action_param is not None:
-        request_data["entityActionParam"] = entity_action_param
-    if scope is not None:
-        request_data["scope"] = scope
+        if isinstance(entity_action_param, list):
+            request_data["entityActionParam"] = entity_action_param
+        else:
+            request_data["entityActionParam"] = [entity_action_param]
     async with acquire_client(settings, client) as c:
         resp = await c.post("/v1.0/action/entity", json={"requestData": request_data})
         if not wait:
             return resp
-        first = (resp.get("responseData") or [{}])[0]
+        rows = resp.get("responseData") or []
+        if len(rows) > 1:
+            agg = await aggregate_action_results(c, rows, timeout=timeout)
+            agg["raw"] = resp
+            return agg
+        first = rows[0] if rows else {}
         task_id = first.get("taskId")
         entity_id = first.get("entityId")
         if not task_id:
@@ -224,13 +236,13 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="entities_action")
     async def _entities_action(
-        entity_ids: list[str], entity_type: str, entity_action_name: str,
-        entity_action_param: str | None = None, scope: str | None = None,
+        entity_ids: list[str], entity_action_name: str,
+        entity_action_param: Any = None,
         wait: bool = True, timeout: int = 60,
     ) -> dict[str, Any]:
-        """Quarantine/restore one or more entities. Waits for completion by default and
-        returns {taskId, status, finalState}; wait=False for fire-and-forget."""
+        """Quarantine/restore one or more entities. Waits by default; multi-ID returns
+        tasks+summary, single-ID returns finalState."""
         return await entities_action(
-            settings, entity_ids, entity_type, entity_action_name, entity_action_param, scope,
+            settings, entity_ids, entity_action_name, entity_action_param,
             wait=wait, timeout=timeout, client=client,
         )
