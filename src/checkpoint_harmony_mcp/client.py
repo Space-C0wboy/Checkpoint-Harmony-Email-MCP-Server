@@ -8,6 +8,7 @@ import httpx
 from .auth import TokenManager
 from .config import Settings
 from .errors import ApiError, HarmonyError, RateLimitError
+from .tools._common import TokenBucket
 
 logger = logging.getLogger("checkpoint_harmony_mcp.client")
 
@@ -29,6 +30,7 @@ class HarmonyClient:
         self._owns_http = http is None
         self._auth = TokenManager(settings, self._http)
         self._scope: str | None = settings.checkpoint_scope or None
+        self._buckets: dict[str, TokenBucket] = {}
 
     async def __aenter__(self) -> "HarmonyClient":
         return self
@@ -37,21 +39,62 @@ class HarmonyClient:
         if self._owns_http:
             await self._http.aclose()
 
-    async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        return await self._request("GET", path, params=params)
+    def set_bucket(self, name: str, rate_per_sec: float, burst: int) -> None:
+        """Register/replace a named token bucket. Calls to ``get/post/put/delete``
+        that pass ``bucket=name`` will await this bucket before issuing the HTTP request."""
+        self._buckets[name] = TokenBucket(rate_per_sec, burst)
+
+    async def get(self, path: str, params: dict[str, Any] | None = None, bucket: str | None = None) -> dict[str, Any]:
+        return await self._request("GET", path, params=params, bucket=bucket)
 
     async def post(
-        self, path: str, json: dict[str, Any] | None = None, params: dict[str, Any] | None = None
+        self, path: str, json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None, bucket: str | None = None,
     ) -> dict[str, Any]:
-        return await self._request("POST", path, json=json, params=params)
+        return await self._request("POST", path, json=json, params=params, bucket=bucket)
 
     async def put(
-        self, path: str, json: dict[str, Any] | None = None, params: dict[str, Any] | None = None
+        self, path: str, json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None, bucket: str | None = None,
     ) -> dict[str, Any]:
-        return await self._request("PUT", path, json=json, params=params)
+        return await self._request("PUT", path, json=json, params=params, bucket=bucket)
 
-    async def delete(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        return await self._request("DELETE", path, params=params)
+    async def delete(self, path: str, params: dict[str, Any] | None = None, bucket: str | None = None) -> dict[str, Any]:
+        return await self._request("DELETE", path, params=params, bucket=bucket)
+
+    async def get_bytes(
+        self, path: str, params: dict[str, Any] | None = None
+    ) -> tuple[bytes, httpx.Headers]:
+        """Issue an authenticated GET that returns raw bytes + response headers.
+        Used for binary responses like ``GET /v1.0/download/entity/{id}``. The auth/
+        scopes/401-refresh/429-backoff path is the same as ``get``."""
+        scope = await self._ensure_scope()
+        attempted_refresh = False
+        for attempt in range(_MAX_429_RETRIES + 1):
+            token = await self._auth.get_token()
+            resp = await self._http.request(
+                "GET", path, params=params,
+                headers=self._headers(token, scope),
+                timeout=self._settings.checkpoint_timeout,
+            )
+            logger.info("GET %s -> %s (bytes)", path, resp.status_code)
+            if resp.status_code == 401 and not attempted_refresh:
+                attempted_refresh = True
+                await self._auth.get_token(force_refresh=True)
+                continue
+            if resp.status_code == 429:
+                retry_after = float(resp.headers.get("Retry-After", "1"))
+                if attempt < _MAX_429_RETRIES:
+                    await asyncio.sleep(retry_after)
+                    continue
+                raise RateLimitError("Rate limited", status_code=429)
+            if resp.status_code >= 400:
+                raise ApiError(
+                    f"API error {resp.status_code}: {resp.text[:500]}",
+                    status_code=resp.status_code,
+                )
+            return resp.content, resp.headers
+        raise ApiError("Request failed after retries")
 
     def _headers(self, token: str, scope: str) -> dict[str, str]:
         return {
@@ -92,7 +135,10 @@ class HarmonyClient:
         *,
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
+        bucket: str | None = None,
     ) -> dict[str, Any]:
+        if bucket and bucket in self._buckets:
+            await self._buckets[bucket].acquire()
         scope = "" if path.rstrip("/") == _SCOPES_PATH else await self._ensure_scope()
         attempted_refresh = False
         for attempt in range(_MAX_429_RETRIES + 1):

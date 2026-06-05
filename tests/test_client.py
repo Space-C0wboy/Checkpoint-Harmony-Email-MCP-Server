@@ -104,3 +104,44 @@ async def test_500_raises_api_error():
         with pytest.raises(ApiError) as exc:
             await client.get("/v1.0/event/E1")
     assert exc.value.status_code == 500
+
+
+@respx.mock
+async def test_get_bytes_returns_raw_bytes_and_headers():
+    _auth_route()
+    respx.get(f"{API_URL}/v1.0/download/entity/E1").mock(return_value=httpx.Response(
+        200,
+        content=b"From: x@y\r\nSubject: hi\r\n\r\nhello",
+        headers={
+            "Content-Type": "application/message/rfc822",
+            "Content-Disposition": "attachment; filename=E1.eml",
+        },
+    ))
+    async with HarmonyClient(_settings()) as c:
+        body, headers = await c.get_bytes("/v1.0/download/entity/E1")
+    assert body.startswith(b"From: x@y")
+    assert headers.get("Content-Type") == "application/message/rfc822"
+
+
+@respx.mock
+async def test_get_bytes_404_raises_apierror():
+    _auth_route()
+    respx.get(f"{API_URL}/v1.0/download/entity/missing").mock(return_value=httpx.Response(404, text="not found"))
+    async with HarmonyClient(_settings()) as c:
+        with pytest.raises(ApiError) as exc:
+            await c.get_bytes("/v1.0/download/entity/missing")
+    assert exc.value.status_code == 404
+
+
+@respx.mock
+async def test_request_honors_named_bucket_throttle():
+    _auth_route()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={"ok": True}))
+    async with HarmonyClient(_settings()) as c:
+        c.set_bucket("test_bucket", rate_per_sec=2.0, burst=1)
+        import time as _t
+        start = _t.monotonic()
+        await c.post("/v1.0/event/query", json={"requestData": {}}, bucket="test_bucket")
+        await c.post("/v1.0/event/query", json={"requestData": {}}, bucket="test_bucket")
+        elapsed = _t.monotonic() - start
+    assert elapsed >= 0.4, f"expected throttling, took only {elapsed:.2f}s"
