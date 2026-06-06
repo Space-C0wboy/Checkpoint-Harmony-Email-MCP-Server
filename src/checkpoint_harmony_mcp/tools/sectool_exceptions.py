@@ -84,9 +84,9 @@ async def urlrep_delete(
     """Delete one URL-reputation exception by (type, str)."""
     _validate_type("urlrep", exception_type, _URLREP_TYPES)
     async with acquire_client(settings, client) as c:
-        return await c.post(
+        return await c.delete(
             "/v1.0/sectool-exceptions/avanan_url/exceptions",
-            json={"requestData": {"exception_type": exception_type, "exception_str": exception_str}},
+            json={"requestData": {"exception_type": exception_type, "exception_str_list": [exception_str]}},
             bucket="exceptions_other",
         )
 
@@ -157,9 +157,9 @@ async def dlp_delete(
     """Delete one DLP exception by (type, str)."""
     _validate_type("dlp", exception_type, _DLP_TYPES)
     async with acquire_client(settings, client) as c:
-        return await c.post(
+        return await c.delete(
             "/v1.0/sectool-exceptions/avanan_dlp/exceptions",
-            json={"requestData": {"exception_type": exception_type, "exception_str": exception_str}},
+            json={"requestData": {"exception_type": exception_type, "exception_str_list": [exception_str]}},
             bucket="exceptions_other",
         )
 

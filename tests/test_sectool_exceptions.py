@@ -68,12 +68,29 @@ async def test_urlrep_update():
 @respx.mock
 async def test_urlrep_delete():
     _auth()
-    route = respx.post(f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions").mock(
-        return_value=httpx.Response(204, json={"responseEnvelope": {"responseCode": 0}}))
-    await sx.urlrep_delete(_settings(), exception_type="block-domain", exception_str="evil.example")
+    route = respx.delete(f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions").mock(
+        return_value=httpx.Response(204))
+    out = await sx.urlrep_delete(_settings(), exception_type="block-domain", exception_str="evil.example")
+    assert out == {}
     import json as _json
     body = _json.loads(route.calls.last.request.read())
-    assert body["requestData"] == {"exception_type": "block-domain", "exception_str": "evil.example"}
+    assert body["requestData"] == {
+        "exception_type": "block-domain", "exception_str_list": ["evil.example"]
+    }
+
+
+@respx.mock
+async def test_dlp_delete():
+    _auth()
+    route = respx.delete(f"{API_URL}/v1.0/sectool-exceptions/avanan_dlp/exceptions").mock(
+        return_value=httpx.Response(204))
+    out = await sx.dlp_delete(_settings(), exception_type="sender_email", exception_str="ok@trusted.com")
+    assert out == {}
+    import json as _json
+    body = _json.loads(route.calls.last.request.read())
+    assert body["requestData"] == {
+        "exception_type": "sender_email", "exception_str_list": ["ok@trusted.com"]
+    }
 
 
 async def test_urlrep_invalid_type_raises():
