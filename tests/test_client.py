@@ -69,6 +69,23 @@ async def test_put_and_delete_methods_exist():
 
 
 @respx.mock
+async def test_delete_sends_json_body():
+    _auth_route()
+    route = respx.delete(f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions").mock(
+        return_value=httpx.Response(204)
+    )
+    async with HarmonyClient(_settings()) as client:
+        out = await client.delete(
+            "/v1.0/sectool-exceptions/avanan_url/exceptions",
+            json={"requestData": {"exception_type": "block-domain", "exception_str_list": ["evil.example"]}},
+        )
+    assert out == {}  # 204 -> empty body -> {}
+    import json as _json
+    body = _json.loads(route.calls.last.request.read())
+    assert body["requestData"]["exception_str_list"] == ["evil.example"]
+
+
+@respx.mock
 async def test_401_triggers_refresh_and_retry():
     auth = respx.post(AUTH_URL).mock(
         side_effect=[

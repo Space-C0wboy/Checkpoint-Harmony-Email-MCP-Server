@@ -59,8 +59,11 @@ class HarmonyClient:
     ) -> dict[str, Any]:
         return await self._request("PUT", path, json=json, params=params, bucket=bucket)
 
-    async def delete(self, path: str, params: dict[str, Any] | None = None, bucket: str | None = None) -> dict[str, Any]:
-        return await self._request("DELETE", path, params=params, bucket=bucket)
+    async def delete(
+        self, path: str, params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None, bucket: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._request("DELETE", path, params=params, json=json, bucket=bucket)
 
     async def get_bytes(
         self, path: str, params: dict[str, Any] | None = None
