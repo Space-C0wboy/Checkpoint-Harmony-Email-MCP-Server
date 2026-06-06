@@ -142,13 +142,10 @@ async def events_action(
     ``{taskId, status, finalState, raw}``; ``wait=False`` returns the raw POST result."""
     request_data: dict[str, Any] = {
         "eventIds": event_ids,
-        "eventActionName": [event_action_name],  # API spec: array of string
+        "eventActionName": event_action_name,  # scalar enum name
     }
     if event_action_param is not None:
-        if isinstance(event_action_param, list):
-            request_data["eventActionParam"] = event_action_param
-        else:
-            request_data["eventActionParam"] = [event_action_param]
+        request_data["eventActionParam"] = event_action_param  # scalar
     async with acquire_client(settings, client) as c:
         resp = await c.post("/v1.0/action/event", json={"requestData": request_data})
         if not wait:

@@ -60,7 +60,9 @@ Exceptions, URL Reputation, DLP, and Scopes — full parity with the v1.50 API.
 - **Find tools** (`events_find`, `entities_find`) locate a specific message/event by
   sender, recipient, subject, message-ID, or entity-ID within a date window.
 - **Action tools** (`events_action`, `entities_action`) wait for completion by default and
-  return the final entity state; pass `wait=false` for fire-and-forget.
+  return the final entity state; pass `wait=false` for fire-and-forget. `entities_action`
+  requires `entity_type` — the target entity's `saasEntityType` (e.g.
+  `office365_emails_email`), as returned by `entities_query`/`entities_find`.
 - **`exceptions_*`** (anti-phishing) types are `whitelist`, `blacklist`, and `spam_whitelist`
   (case-insensitive). **URL-Reputation** exception types are `allow-url`, `allow-domain`,
   `block-url`, `block-domain`. **DLP** exception types are `hash`, `text_content`,

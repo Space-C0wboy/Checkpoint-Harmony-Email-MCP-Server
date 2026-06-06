@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-06-06
+
+### Fixed
+- Reverted a v0.2.0 regression that sent `events_action`/`entities_action` action names
+  and params as JSON arrays and dropped the required `entityType` field, which caused the
+  live API to reject quarantine/restore. Action bodies now use scalar enum names and
+  scalar params again; `entities_action` again requires `entity_type` (the entity's
+  `saasEntityType`, e.g. `office365_emails_email`).
+- Corrected `urlrep_delete`/`dlp_delete` to delete exceptions via
+  `DELETE /v1.0/sectool-exceptions/{family}/exceptions` with a
+  `{requestData: {exception_type, exception_str_list}}` body. The previous
+  `POST .../exceptions` call with an `exception_str` field was rejected by the API
+  ("Exception is invalid!").
+
+[0.2.1]: https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server/releases/tag/v0.2.1
+
 ## [0.2.0] - 2026-06-05
 
 ### Changed (breaking)
