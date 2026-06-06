@@ -178,6 +178,7 @@ async def entities_find(
 async def entities_action(
     settings: Settings,
     entity_ids: list[str],
+    entity_type: str,
     entity_action_name: str,
     entity_action_param: Any = None,
     wait: bool = True,
@@ -185,17 +186,17 @@ async def entities_action(
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Perform an action (e.g. quarantine, restore) on one or more secured entities.
+    ``entity_type`` is required (e.g. ``office365_emails_email``) — it is the
+    ``saasEntityType`` of the target entities, returned by entities_query/entities_find.
     Waits by default. Multi-ID + wait returns ``{tasks, summary}``; single-ID + wait
     returns ``{taskId, status, finalState, raw}``."""
     request_data: dict[str, Any] = {
         "entityIds": entity_ids,
-        "entityActionName": [entity_action_name],  # API spec: array
+        "entityType": entity_type,
+        "entityActionName": entity_action_name,  # scalar enum name
     }
     if entity_action_param is not None:
-        if isinstance(entity_action_param, list):
-            request_data["entityActionParam"] = entity_action_param
-        else:
-            request_data["entityActionParam"] = [entity_action_param]
+        request_data["entityActionParam"] = entity_action_param  # scalar
     async with acquire_client(settings, client) as c:
         resp = await c.post("/v1.0/action/entity", json={"requestData": request_data})
         if not wait:
@@ -274,13 +275,14 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="entities_action")
     async def _entities_action(
-        entity_ids: list[str], entity_action_name: str,
+        entity_ids: list[str], entity_type: str, entity_action_name: str,
         entity_action_param: Any = None,
         wait: bool = True, timeout: int = 60,
     ) -> dict[str, Any]:
-        """Quarantine/restore one or more entities. Waits by default; multi-ID returns
-        tasks+summary, single-ID returns finalState."""
+        """Quarantine/restore one or more entities. entity_type is required (the entity's
+        saasEntityType, e.g. office365_emails_email, from entities_query/entities_find).
+        Waits by default; multi-ID returns tasks+summary, single-ID returns finalState."""
         return await entities_action(
-            settings, entity_ids, entity_action_name, entity_action_param,
+            settings, entity_ids, entity_type, entity_action_name, entity_action_param,
             wait=wait, timeout=timeout, client=client,
         )

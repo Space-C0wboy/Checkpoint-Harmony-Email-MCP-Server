@@ -52,7 +52,7 @@ async def test_action():
         return_value=httpx.Response(200, json={"responseData": [{"taskId": 3}]})
     )
     out = await entities.entities_action(
-        _settings(), entity_ids=["ENT1"],
+        _settings(), entity_ids=["ENT1"], entity_type="office365_emails_email",
         entity_action_name="quarantine", entity_action_param="malicious", wait=False,
     )
     assert out["responseData"][0]["taskId"] == 3
@@ -192,26 +192,27 @@ async def test_entities_action_wait_returns_final_state():
         200, json={"responseData": {"actions": [{"action_status": "completed"}]}}))
     respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(
         200, json={"responseData": [{"entityInfo": {"entityId": "ENT1", "entityActionState": "quarantined"}, "entityPayload": {"isQuarantined": True, "isRestored": False}}]}))
-    out = await entities.entities_action(_settings(), entity_ids=["ENT1"], entity_action_name="quarantine", timeout=0)
+    out = await entities.entities_action(_settings(), entity_ids=["ENT1"], entity_type="office365_emails_email", entity_action_name="quarantine", timeout=0)
     assert out["status"] == "completed" and out["taskId"] == "T3"
     assert out["finalState"]["isQuarantined"] is True
 
 
 @respx.mock
-async def test_entities_action_body_uses_arrays_and_no_extra_fields():
+async def test_entities_action_body_uses_scalars_and_entity_type():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/action/entity").mock(
         return_value=httpx.Response(200, json={"responseData": [{"entityId": "ENT1", "taskId": "T3"}]}))
     await entities.entities_action(
-        _settings(), entity_ids=["ENT1"],
+        _settings(), entity_ids=["ENT1"], entity_type="office365_emails_email",
         entity_action_name="quarantine", entity_action_param="malicious", wait=False,
     )
     import json as _json
     body = _json.loads(route.calls.last.request.read())
     rd = body["requestData"]
-    assert rd["entityActionName"] == ["quarantine"]
-    assert rd["entityActionParam"] == ["malicious"]
-    assert "entityType" not in rd
+    assert rd["entityIds"] == ["ENT1"]
+    assert rd["entityType"] == "office365_emails_email"   # required, present
+    assert rd["entityActionName"] == "quarantine"          # scalar
+    assert rd["entityActionParam"] == "malicious"          # scalar
     assert "scope" not in rd
 
 
@@ -228,7 +229,7 @@ async def test_entities_action_bulk_returns_summary():
             200, json={"responseData": [{"entityInfo": {"entityId": eid, "entityActionState": "quarantined"},
                                           "entityPayload": {"isQuarantined": True}}]}))
     out = await entities.entities_action(
-        _settings(), entity_ids=["ENT1", "ENT2"], entity_action_name="quarantine", timeout=0,
+        _settings(), entity_ids=["ENT1", "ENT2"], entity_type="office365_emails_email", entity_action_name="quarantine", timeout=0,
     )
     assert out["summary"]["completed"] == 2
 
