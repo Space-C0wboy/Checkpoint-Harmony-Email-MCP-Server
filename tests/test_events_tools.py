@@ -242,7 +242,7 @@ async def test_events_find_scan_cap_hit():
 
 
 @respx.mock
-async def test_action_body_uses_arrays():
+async def test_action_body_uses_scalars():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/action/event").mock(
         return_value=httpx.Response(200, json={"responseData": [{"eventId": "E1", "entityId": "ENT1", "taskId": "T7"}]}))
@@ -251,9 +251,12 @@ async def test_action_body_uses_arrays():
     )
     import json as _json
     body = _json.loads(route.calls.last.request.read())
-    assert body["requestData"]["eventActionName"] == ["quarantine"]
-    assert body["requestData"]["eventActionParam"] == ["spam"]
-    assert "scope" not in body["requestData"]
+    rd = body["requestData"]
+    assert rd["eventIds"] == ["E1"]
+    assert rd["eventActionName"] == "quarantine"   # scalar, not ["quarantine"]
+    assert rd["eventActionParam"] == "spam"        # scalar, not ["spam"]
+    assert "entityType" not in rd                  # events have no entityType
+    assert "scope" not in rd
 
 
 @respx.mock
