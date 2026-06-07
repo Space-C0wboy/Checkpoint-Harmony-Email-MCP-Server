@@ -1,4 +1,5 @@
 import base64
+import json
 import re
 from typing import Any
 
@@ -6,7 +7,7 @@ from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
 from ._common import (
-    acquire_client, apply_view, aggregate_action_results, paginate, record_matches,
+    acquire_client, apply_view, aggregate_action_results, default_window, paginate,
     wait_for_task,
 )
 
@@ -70,7 +71,7 @@ async def entities_download(
 async def entities_query(
     settings: Settings,
     entity_filter: dict[str, Any],
-    extended_filter: list[Any] | None = None,
+    extended_filter: list[dict[str, Any]] | str | None = None,
     scroll_id: str | None = None,
     limit: int = 25,
     full: bool = False,
@@ -87,6 +88,15 @@ async def entities_query(
 
     `max_records` (cap 500) auto-paginates and governs the returned count (overrides
     `limit`). `count_only=True` returns {recordsNumber, histogram}. `full=True` for raw."""
+    if isinstance(extended_filter, str):
+        try:
+            extended_filter = json.loads(extended_filter)
+        except json.JSONDecodeError as exc:
+            raise HarmonyError(f"extended_filter must be a JSON array: {exc}") from exc
+    if extended_filter is not None and not isinstance(extended_filter, list):
+        raise HarmonyError(
+            "extended_filter must be a list of {saasAttrName, saasAttrOp, saasAttrValue} objects"
+        )
     request_data: dict[str, Any] = {"entityFilter": entity_filter}
     if extended_filter is not None:
         request_data["entityExtendedFilter"] = extended_filter
@@ -122,57 +132,73 @@ async def entities_find(
     saas: str = "office365_emails",
     start_date: str | None = None,
     end_date: str | None = None,
-    max_pages: int = 20,
+    limit: int = 25,
+    max_records: int = 100,
     full: bool = False,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """Find secured entities by message_id / sender / recipient / subject_contains /
-    entity_id within a date window, paginating internally. Returns
-    {matches, pagesScanned, scanCapHit, totalInWindow}. Requires start_date and >=1 filter."""
-    if not start_date:
-        raise HarmonyError("entities_find requires start_date")
+    """Locate a specific email/entity by sender, recipient, subject, or message-ID.
+    Filters server-side (entityExtendedFilter) and auto-relaxes exact->contains;
+    defaults to the last 30 days. Returns {matches, matchMode, totalInWindow, truncated}.
+    Requires >=1 filter; start_date/end_date are optional."""
     if not any([message_id, sender, recipient, subject_contains, entity_id]):
-        raise HarmonyError("entities_find requires at least one filter (message_id/sender/recipient/subject_contains/entity_id)")
-    ent_filter = {"saas": saas, "startDate": start_date}
+        raise HarmonyError(
+            "entities_find requires at least one filter "
+            "(message_id/sender/recipient/subject_contains/entity_id)"
+        )
+
+    # entity_id-only: a direct lookup beats a filtered search.
+    if entity_id and not any([message_id, sender, recipient, subject_contains]):
+        async with acquire_client(settings, client) as c:
+            resp = await c.get(f"/v1.0/search/entity/{entity_id}")
+        rows = resp.get("responseData") or []
+        matches = rows if full else [_compact_entity(r) for r in rows]
+        return {"matches": matches[:limit], "matchMode": "exact",
+                "totalInWindow": len(rows), "truncated": False}
+
+    ent_filter: dict[str, Any] = {"saas": saas, "startDate": default_window(start_date)}
     if end_date:
         ent_filter["endDate"] = end_date
-    matches: list[dict[str, Any]] = []
-    pages = 0
-    scan_cap_hit = False
-    total = None
-    rd: dict[str, Any] = {"entityFilter": ent_filter}
+
+    # (saasAttrName, value, exact_op): exact_op is the op used in the exact pass;
+    # fields that are inherently substring/list use "contains" in both passes.
+    specs: list[tuple[str, str, str]] = []
+    if sender:
+        specs.append(("entityPayload.fromEmail", sender, "is"))
+    if message_id:
+        specs.append(("entityPayload.internetMessageId", message_id, "is"))
+    if recipient:
+        specs.append(("entityPayload.recipients", recipient, "contains"))
+    if subject_contains:
+        specs.append(("entityPayload.subject", subject_contains, "contains"))
+    if entity_id:
+        specs.append(("entityInfo.entityId", entity_id, "is"))
+
+    def _build(relax: bool) -> list[dict[str, Any]]:
+        return [
+            {"saasAttrName": name, "saasAttrValue": value,
+             "saasAttrOp": "contains" if (relax and exact_op == "is") else exact_op}
+            for name, value, exact_op in specs
+        ]
+
+    has_exact = any(exact_op == "is" for _, _, exact_op in specs)
+
     async with acquire_client(settings, client) as c:
-        while True:
-            resp = await c.post("/v1.0/search/query", json={"requestData": rd})
-            env = resp.get("responseEnvelope") or {}
-            if total is None:
-                total = env.get("recordsNumber")
-            page = resp.get("responseData") or []
-            for ent in page:
-                payload = ent.get("entityPayload") or {}
-                info = ent.get("entityInfo") or {}
-                comps = []
-                if message_id:
-                    comps.append((payload.get("internetMessageId"), message_id, "exact"))
-                if sender:
-                    comps.append((payload.get("fromEmail"), sender, "exact"))
-                if recipient:
-                    comps.append((payload.get("recipients"), recipient, "in"))
-                if subject_contains:
-                    comps.append((payload.get("subject"), subject_contains, "contains"))
-                if entity_id:
-                    comps.append((info.get("entityId"), entity_id, "exact"))
-                if record_matches(comps):
-                    matches.append(ent if full else _compact_entity(ent))
-            pages += 1
-            scroll = env.get("scrollId")
-            if not page or not scroll:
-                break
-            if pages >= max_pages:
-                scan_cap_hit = True
-                break
-            rd = {"entityFilter": ent_filter, "scrollId": scroll}
-    return {"matches": matches, "pagesScanned": pages, "scanCapHit": scan_cap_hit, "totalInWindow": total}
+        rd = {"entityFilter": ent_filter, "entityExtendedFilter": _build(relax=False)}
+        records, env, truncated = await paginate(c, "/v1.0/search/query", rd, max_records)
+        mode = "exact" if has_exact else "contains"
+        if not records and has_exact:
+            rd = {"entityFilter": ent_filter, "entityExtendedFilter": _build(relax=True)}
+            records, env, truncated = await paginate(c, "/v1.0/search/query", rd, max_records)
+            mode = "contains"
+
+    shown = records if full else [_compact_entity(r) for r in records]
+    shown = shown[:limit]
+    total = env.get("recordsNumber")
+    more = truncated or (isinstance(total, int) and total > len(shown))
+    if not records:
+        mode = "none"
+    return {"matches": shown, "matchMode": mode, "totalInWindow": total, "truncated": bool(more)}
 
 
 async def entities_action(
@@ -245,7 +271,7 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="entities_query")
     async def _entities_query(
-        entity_filter: dict[str, Any], extended_filter: list[Any] | None = None,
+        entity_filter: dict[str, Any], extended_filter: list[dict[str, Any]] | None = None,
         scroll_id: str | None = None, limit: int = 25, full: bool = False,
         max_records: int | None = None, count_only: bool = False,
     ) -> dict[str, Any]:
@@ -263,14 +289,16 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
         recipient: str | None = None, subject_contains: str | None = None,
         entity_id: str | None = None, saas: str = "office365_emails",
         start_date: str | None = None, end_date: str | None = None,
-        max_pages: int = 20, full: bool = False,
+        limit: int = 25, max_records: int = 100, full: bool = False,
     ) -> dict[str, Any]:
-        """Find emails/entities by message_id/sender/recipient/subject_contains/entity_id
-        within a date window (start_date required, >=1 filter). Returns matches + scan metadata."""
+        """Locate a specific email/entity by sender, recipient, subject, or message-ID.
+        Filters server-side and auto-relaxes exact->contains; defaults to the last 30 days
+        when start_date is omitted. Returns matches + {matchMode, totalInWindow, truncated}."""
         return await entities_find(
             settings, message_id=message_id, sender=sender, recipient=recipient,
             subject_contains=subject_contains, entity_id=entity_id, saas=saas,
-            start_date=start_date, end_date=end_date, max_pages=max_pages, full=full, client=client,
+            start_date=start_date, end_date=end_date, limit=limit, max_records=max_records,
+            full=full, client=client,
         )
 
     @app.tool(name="entities_action")

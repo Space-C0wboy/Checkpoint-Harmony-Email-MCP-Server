@@ -5,7 +5,7 @@ from ..config import Settings
 from ..errors import HarmonyError
 from ._common import (
     acquire_client, apply_view, clean_description, aggregate_action_results,
-    normalize_task_status, paginate, record_matches, wait_for_task,
+    default_window, normalize_task_status, paginate, record_matches, wait_for_task,
 )
 
 _EVENT_FIELDS = (
@@ -78,22 +78,33 @@ async def events_find(
     full: bool = False,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
-    """Find security events by sender / text_contains (matches description) / entity_id /
-    event_id within a date window, paginating internally. Returns
-    {matches, pagesScanned, scanCapHit, totalInWindow}. Requires start_date and >=1 filter."""
-    if not start_date:
-        raise HarmonyError("events_find requires start_date")
+    """Find security events by sender / text_contains / entity_id / event_id. Narrows
+    server-side (a `description` substring pre-filter, or `eventIds` for event_id) then
+    refines client-side, auto-relaxing exact->contains for sender. Defaults to the last
+    30 days. Returns {matches, matchMode, pagesScanned, scanCapHit, totalInWindow}.
+    Requires >=1 filter; start_date/end_date are optional."""
     if not any([sender, text_contains, entity_id, event_id]):
-        raise HarmonyError("events_find requires at least one filter (sender/text_contains/entity_id/event_id)")
-    base = {"startDate": start_date}
+        raise HarmonyError(
+            "events_find requires at least one filter (sender/text_contains/entity_id/event_id)"
+        )
+    base: dict[str, Any] = {"startDate": default_window(start_date)}
     if end_date:
         base["endDate"] = end_date
-    matches: list[dict[str, Any]] = []
-    pages = 0
-    scan_cap_hit = False
-    total = None
-    rd = dict(base)
-    async with acquire_client(settings, client) as c:
+    if event_id:
+        base["eventIds"] = [event_id]
+    else:
+        # Prefer sender for the server-side description pre-filter (more selective);
+        # fall back to text_contains. Client-side refinement still applies all filters.
+        prefilter = sender or text_contains
+        if prefilter:
+            base["description"] = prefilter
+
+    async def _scan(c: HarmonyClient, sender_mode: str) -> tuple[list, int, bool, Any]:
+        matches: list[dict[str, Any]] = []
+        pages = 0
+        scan_cap_hit = False
+        total: Any = None
+        rd = dict(base)
         while True:
             resp = await c.post("/v1.0/event/query", json={"requestData": rd})
             env = resp.get("responseEnvelope") or {}
@@ -103,7 +114,7 @@ async def events_find(
             for ev in page:
                 comps = []
                 if sender:
-                    comps.append((ev.get("senderAddress"), sender, "exact"))
+                    comps.append((ev.get("senderAddress"), sender, sender_mode))
                 if text_contains:
                     comps.append((clean_description(ev.get("description")), text_contains, "contains"))
                 if entity_id:
@@ -120,7 +131,24 @@ async def events_find(
                 scan_cap_hit = True
                 break
             rd = {**base, "scrollId": scroll}
-    return {"matches": matches, "pagesScanned": pages, "scanCapHit": scan_cap_hit, "totalInWindow": total}
+        return matches, pages, scan_cap_hit, total
+
+    async with acquire_client(settings, client) as c:
+        matches, pages, scan_cap_hit, total = await _scan(c, "exact")
+        mode = "exact"
+        if not matches and sender:
+            # The description pre-filter still narrows server-side; only the client-side
+            # sender comparison relaxes from exact to contains on this second pass.
+            matches, pages, scan_cap_hit, total = await _scan(c, "contains")
+            mode = "contains"
+    if not matches:
+        mode = "none"
+    elif not sender:
+        # No sender relaxation applies. Report "exact" only for exact-identifier matches
+        # (event_id/entity_id); a text_contains-only match is inherently substring.
+        mode = "exact" if (event_id or entity_id) else "contains"
+    return {"matches": matches, "matchMode": mode, "pagesScanned": pages,
+            "scanCapHit": scan_cap_hit, "totalInWindow": total}
 
 
 async def events_action(
@@ -217,8 +245,9 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
         start_date: str | None = None, end_date: str | None = None,
         max_pages: int = 20, full: bool = False,
     ) -> dict[str, Any]:
-        """Find events by sender/text_contains/entity_id/event_id within a date window
-        (start_date required, >=1 filter). Returns matches + scan metadata."""
+        """Find events by sender/text_contains/entity_id/event_id. Narrows server-side
+        then refines (auto-relaxes exact->contains for sender); defaults to the last 30
+        days. Returns matches + {matchMode, pagesScanned, scanCapHit, totalInWindow}."""
         return await events_find(
             settings, sender=sender, text_contains=text_contains, entity_id=entity_id,
             event_id=event_id, start_date=start_date, end_date=end_date,

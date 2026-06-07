@@ -154,33 +154,78 @@ async def test_entities_query_count_only():
 
 
 @respx.mock
-async def test_entities_find_by_message_id():
+async def test_entities_find_server_side_exact():
     _auth()
-    e1 = _entity("E1")
-    e1["entityPayload"]["internetMessageId"] = "<abc@proton.me>"
-    e2 = _entity("E2")
-    e2["entityPayload"]["internetMessageId"] = "<other@x.com>"
-    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
-        "responseEnvelope": {"recordsNumber": 2, "scrollId": ""}, "responseData": [e1, e2]}))
-    out = await entities.entities_find(_settings(), message_id="<ABC@proton.me>", start_date="2026-06-01T00:00:00Z")
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    out = await entities.entities_find(_settings(), sender="a@b.com", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "exact"
     assert len(out["matches"]) == 1 and out["matches"][0]["entityId"] == "E1"
+    import json as _json
+    ef = _json.loads(route.calls.last.request.read())["requestData"]["entityExtendedFilter"]
+    assert {"saasAttrName": "entityPayload.fromEmail", "saasAttrOp": "is", "saasAttrValue": "a@b.com"} in ef
 
 
 @respx.mock
-async def test_entities_find_by_sender_and_subject():
+async def test_entities_find_falls_back_to_contains():
     _auth()
-    e1 = _entity("E1")
-    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
-        "responseEnvelope": {"scrollId": ""}, "responseData": [e1]}))
-    out = await entities.entities_find(_settings(), sender="A@B.com", subject_contains="imaging", start_date="2026-06-01T00:00:00Z")
+    respx.post(f"{API_URL}/v1.0/search/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}),
+    ])
+    out = await entities.entities_find(_settings(), sender="proton.me", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "contains"
     assert len(out["matches"]) == 1
 
 
-async def test_entities_find_requires_filter_and_date():
+@respx.mock
+async def test_entities_find_subject_uses_contains():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    out = await entities.entities_find(_settings(), subject_contains="imaging", start_date="2026-06-01T00:00:00Z")
+    import json as _json
+    ef = _json.loads(route.calls.last.request.read())["requestData"]["entityExtendedFilter"]
+    assert ef[0] == {"saasAttrName": "entityPayload.subject", "saasAttrOp": "contains", "saasAttrValue": "imaging"}
+    assert out["matchMode"] == "contains"
+
+
+@respx.mock
+async def test_entities_find_defaults_window_when_no_start_date():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}))
+    await entities.entities_find(_settings(), sender="a@b.com")
+    import json as _json
+    ef = _json.loads(route.calls.last.request.read())["requestData"]["entityFilter"]
+    assert ef.get("startDate")
+    assert "endDate" not in ef
+
+
+@respx.mock
+async def test_entities_find_entity_id_short_circuits():
+    _auth()
+    g = respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(200, json={
+        "responseData": [_entity("ENT1")]}))
+    q = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={"responseData": []}))
+    out = await entities.entities_find(_settings(), entity_id="ENT1")
+    assert g.called and not q.called
+    assert out["matches"][0]["entityId"] == "ENT1" and out["matchMode"] == "exact"
+
+
+@respx.mock
+async def test_entities_find_truncated_when_more_than_limit():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 50, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    out = await entities.entities_find(_settings(), sender="a@b.com", start_date="x", limit=1)
+    assert out["truncated"] is True and out["totalInWindow"] == 50
+
+
+@respx.mock
+async def test_entities_find_requires_filter():
     with pytest.raises(HarmonyError):
         await entities.entities_find(_settings(), start_date="2026-06-01T00:00:00Z")
-    with pytest.raises(HarmonyError):
-        await entities.entities_find(_settings(), sender="a@b.com")
 
 
 @respx.mock
@@ -259,3 +304,71 @@ async def test_entities_download_404_raises():
     from checkpoint_harmony_mcp.errors import HarmonyError, ApiError
     with pytest.raises((HarmonyError, ApiError)):
         await entities.entities_download(_settings(), entity_id="missing")
+
+
+@respx.mock
+async def test_entities_query_extended_filter_accepts_json_string():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(
+        return_value=httpx.Response(200, json={"responseData": []}))
+    import json as _json
+    await entities.entities_query(
+        _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
+        extended_filter=_json.dumps([
+            {"saasAttrName": "entityPayload.fromEmail", "saasAttrOp": "is", "saasAttrValue": "a@b.com"}
+        ]),
+    )
+    body = _json.loads(route.calls.last.request.read())
+    ef = body["requestData"]["entityExtendedFilter"]
+    assert ef[0]["saasAttrName"] == "entityPayload.fromEmail"
+    assert ef[0]["saasAttrOp"] == "is"
+    assert ef[0]["saasAttrValue"] == "a@b.com"
+
+
+async def test_entities_query_extended_filter_rejects_bad_json_string():
+    with pytest.raises(HarmonyError, match="JSON array"):
+        await entities.entities_query(
+            _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
+            extended_filter="not json",
+        )
+
+
+async def test_entities_query_extended_filter_rejects_non_list():
+    with pytest.raises(HarmonyError, match="list of"):
+        await entities.entities_query(
+            _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
+            extended_filter='{"saasAttrName": "x"}',  # JSON object, not an array
+        )
+
+
+@respx.mock
+async def test_entities_find_fallback_second_request_uses_contains():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}),
+    ])
+    out = await entities.entities_find(_settings(), sender="proton.me", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "contains"
+    import json as _json
+    # two requests were made; the second (fallback) must use the contains operator
+    first = _json.loads(route.calls[0].request.read())["requestData"]["entityExtendedFilter"]
+    second = _json.loads(route.calls[1].request.read())["requestData"]["entityExtendedFilter"]
+    assert first[0]["saasAttrOp"] == "is"
+    assert second[0]["saasAttrOp"] == "contains"
+    assert second[0]["saasAttrName"] == "entityPayload.fromEmail"
+
+
+@respx.mock
+async def test_entities_find_entity_id_with_other_filter_goes_to_query():
+    _auth()
+    g = respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(200, json={"responseData": []}))
+    q = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    await entities.entities_find(_settings(), entity_id="ENT1", sender="a@b.com", start_date="2026-06-01T00:00:00Z")
+    # combined with another filter -> NOT a short-circuit GET; uses /search/query with entityInfo.entityId
+    assert q.called and not g.called
+    import json as _json
+    ef = _json.loads(q.calls.last.request.read())["requestData"]["entityExtendedFilter"]
+    names = {c["saasAttrName"] for c in ef}
+    assert "entityInfo.entityId" in names and "entityPayload.fromEmail" in names

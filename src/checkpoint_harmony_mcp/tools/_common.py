@@ -3,6 +3,7 @@ import json
 import re
 import time as _time_mod
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable
 
 from ..config import Settings
@@ -26,6 +27,19 @@ async def acquire_client(
     else:
         async with HarmonyClient(settings) as owned:
             yield owned
+
+
+_DEFAULT_WINDOW_DAYS = 30
+
+
+def default_window(start_date: str | None) -> str:
+    """Return ``start_date`` if provided, else an ISO-8601 UTC timestamp
+    ``_DEFAULT_WINDOW_DAYS`` days in the past. Server-side filtering makes a wide
+    default window cheap, so callers need not always specify a date."""
+    if start_date:
+        return start_date
+    past = datetime.now(timezone.utc) - timedelta(days=_DEFAULT_WINDOW_DAYS)
+    return past.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def apply_view(

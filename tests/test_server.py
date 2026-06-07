@@ -33,3 +33,12 @@ async def test_all_tools_registered(monkeypatch):
     app = server.build_server()
     names = {t.name for t in await app.list_tools()}
     assert names == EXPECTED_TOOLS
+
+
+async def test_extended_filter_param_is_array(monkeypatch):
+    _env(monkeypatch)
+    app = server.build_server()
+    tools = {t.name: t for t in await app.list_tools()}
+    prop = tools["entities_query"].to_mcp_tool().inputSchema["properties"]["extended_filter"]
+    types = [prop.get("type")] + [s.get("type") for s in prop.get("anyOf", [])]
+    assert "array" in types

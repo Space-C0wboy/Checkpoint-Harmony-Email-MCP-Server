@@ -1,4 +1,5 @@
 import time as _time
+from datetime import datetime, timezone
 
 import httpx
 import respx
@@ -8,9 +9,20 @@ from checkpoint_harmony_mcp.config import Settings
 from checkpoint_harmony_mcp.tools._common import (
     TokenBucket,
     aggregate_action_results,
+    default_window,
     paginate,
     wait_for_task,
 )
+
+
+def test_default_window_passthrough_and_default():
+    assert default_window("2026-01-01T00:00:00Z") == "2026-01-01T00:00:00Z"
+    # empty string is treated as "no date" -> returns a generated default, not ""
+    assert default_window("") != ""
+    got = default_window(None)
+    parsed = datetime.strptime(got, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    delta = (datetime.now(timezone.utc) - parsed).total_seconds()
+    assert 29 * 86400 <= delta <= 30 * 86400 + 2  # ~30 days, +2s CI slack
 
 AUTH = "https://gw.example/auth/external"
 API = "https://gw.example/app/hec-api"

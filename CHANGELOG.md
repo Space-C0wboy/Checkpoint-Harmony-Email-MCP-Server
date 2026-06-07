@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-06-06
+
+### Changed
+- `entities_find` and `events_find` now filter **server-side** and default to the **last
+  30 days** when `start_date` is omitted. Matching tries exact first and falls back to
+  contains, reported via a new `matchMode` field (`exact` | `contains` | `none`).
+  `entities_find` uses precise `entityExtendedFilter` operators and no longer returns
+  `pagesScanned`/`scanCapHit`; `events_find` narrows via the `description` filter (or
+  `eventIds` for `event_id`) and retains `pagesScanned`/`scanCapHit`. `entities_find`
+  also gains `limit`/`max_records` and an `entity_id` direct-lookup short-circuit.
+
+### Fixed
+- `entities_query`'s `extended_filter` is now a properly-typed array, so MCP clients
+  serialize it as JSON instead of a rejected string; it also accepts a JSON string
+  defensively. Server-side entity filtering is now usable directly.
+
+[0.2.2]: https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server/releases/tag/v0.2.2
+
 ## [0.2.1] - 2026-06-06
 
 ### Fixed
