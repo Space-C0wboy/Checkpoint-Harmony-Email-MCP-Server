@@ -58,7 +58,10 @@ Exceptions, URL Reputation, DLP, and Scopes — full parity with the v1.50 API.
   for a `{recordsNumber, histogram}` triage view, or `full=true` for raw objects.
   `events_query` requires a date range (`startDate`).
 - **Find tools** (`events_find`, `entities_find`) locate a specific message/event by
-  sender, recipient, subject, message-ID, or entity-ID within a date window.
+  sender, recipient, subject, message-ID, or entity-ID. They filter **server-side** and
+  default to the **last 30 days** (override with `start_date`/`end_date`), trying an exact
+  match first and falling back to `contains` — the result's `matchMode` says which hit.
+  Power users can pass a raw server-side `extended_filter` to `entities_query`.
 - **Action tools** (`events_action`, `entities_action`) wait for completion by default and
   return the final entity state; pass `wait=false` for fire-and-forget. `entities_action`
   requires `entity_type` — the target entity's `saasEntityType` (e.g.
