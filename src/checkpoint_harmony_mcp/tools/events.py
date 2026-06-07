@@ -93,6 +93,8 @@ async def events_find(
     if event_id:
         base["eventIds"] = [event_id]
     else:
+        # Prefer sender for the server-side description pre-filter (more selective);
+        # fall back to text_contains. Client-side refinement still applies all filters.
         prefilter = sender or text_contains
         if prefilter:
             base["description"] = prefilter
@@ -135,10 +137,16 @@ async def events_find(
         matches, pages, scan_cap_hit, total = await _scan(c, "exact")
         mode = "exact"
         if not matches and sender:
+            # The description pre-filter still narrows server-side; only the client-side
+            # sender comparison relaxes from exact to contains on this second pass.
             matches, pages, scan_cap_hit, total = await _scan(c, "contains")
             mode = "contains"
     if not matches:
         mode = "none"
+    elif not sender:
+        # No sender relaxation applies. Report "exact" only for exact-identifier matches
+        # (event_id/entity_id); a text_contains-only match is inherently substring.
+        mode = "exact" if (event_id or entity_id) else "contains"
     return {"matches": matches, "matchMode": mode, "pagesScanned": pages,
             "scanCapHit": scan_cap_hit, "totalInWindow": total}
 

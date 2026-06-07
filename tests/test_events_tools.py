@@ -307,6 +307,25 @@ async def test_action_body_uses_scalars():
 
 
 @respx.mock
+async def test_events_find_text_contains_only_reports_contains_mode():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""},
+        "responseData": [{**_event("E1"), "description": "Spam from someone - widget invoice attached"}]}))
+    out = await events.events_find(_settings(), text_contains="invoice", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "contains" and len(out["matches"]) == 1
+
+
+@respx.mock
+async def test_events_find_event_id_reports_exact_mode():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_event("E1")]}))
+    out = await events.events_find(_settings(), event_id="E1", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "exact"
+
+
+@respx.mock
 async def test_events_action_bulk_returns_summary():
     _auth()
     respx.post(f"{API_URL}/v1.0/action/event").mock(return_value=httpx.Response(200, json={
