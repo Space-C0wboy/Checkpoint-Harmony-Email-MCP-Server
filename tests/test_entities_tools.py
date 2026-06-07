@@ -154,33 +154,78 @@ async def test_entities_query_count_only():
 
 
 @respx.mock
-async def test_entities_find_by_message_id():
+async def test_entities_find_server_side_exact():
     _auth()
-    e1 = _entity("E1")
-    e1["entityPayload"]["internetMessageId"] = "<abc@proton.me>"
-    e2 = _entity("E2")
-    e2["entityPayload"]["internetMessageId"] = "<other@x.com>"
-    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
-        "responseEnvelope": {"recordsNumber": 2, "scrollId": ""}, "responseData": [e1, e2]}))
-    out = await entities.entities_find(_settings(), message_id="<ABC@proton.me>", start_date="2026-06-01T00:00:00Z")
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    out = await entities.entities_find(_settings(), sender="a@b.com", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "exact"
     assert len(out["matches"]) == 1 and out["matches"][0]["entityId"] == "E1"
+    import json as _json
+    ef = _json.loads(route.calls.last.request.read())["requestData"]["entityExtendedFilter"]
+    assert {"saasAttrName": "entityPayload.fromEmail", "saasAttrOp": "is", "saasAttrValue": "a@b.com"} in ef
 
 
 @respx.mock
-async def test_entities_find_by_sender_and_subject():
+async def test_entities_find_falls_back_to_contains():
     _auth()
-    e1 = _entity("E1")
-    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
-        "responseEnvelope": {"scrollId": ""}, "responseData": [e1]}))
-    out = await entities.entities_find(_settings(), sender="A@B.com", subject_contains="imaging", start_date="2026-06-01T00:00:00Z")
+    respx.post(f"{API_URL}/v1.0/search/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}),
+    ])
+    out = await entities.entities_find(_settings(), sender="proton.me", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "contains"
     assert len(out["matches"]) == 1
 
 
-async def test_entities_find_requires_filter_and_date():
+@respx.mock
+async def test_entities_find_subject_uses_contains():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    out = await entities.entities_find(_settings(), subject_contains="imaging", start_date="2026-06-01T00:00:00Z")
+    import json as _json
+    ef = _json.loads(route.calls.last.request.read())["requestData"]["entityExtendedFilter"]
+    assert ef[0] == {"saasAttrName": "entityPayload.subject", "saasAttrOp": "contains", "saasAttrValue": "imaging"}
+    assert out["matchMode"] == "contains"
+
+
+@respx.mock
+async def test_entities_find_defaults_window_when_no_start_date():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}))
+    await entities.entities_find(_settings(), sender="a@b.com")
+    import json as _json
+    ef = _json.loads(route.calls.last.request.read())["requestData"]["entityFilter"]
+    assert ef.get("startDate")
+    assert "endDate" not in ef
+
+
+@respx.mock
+async def test_entities_find_entity_id_short_circuits():
+    _auth()
+    g = respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(200, json={
+        "responseData": [_entity("ENT1")]}))
+    q = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={"responseData": []}))
+    out = await entities.entities_find(_settings(), entity_id="ENT1")
+    assert g.called and not q.called
+    assert out["matches"][0]["entityId"] == "ENT1" and out["matchMode"] == "exact"
+
+
+@respx.mock
+async def test_entities_find_truncated_when_more_than_limit():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 50, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    out = await entities.entities_find(_settings(), sender="a@b.com", start_date="x", limit=1)
+    assert out["truncated"] is True and out["totalInWindow"] == 50
+
+
+@respx.mock
+async def test_entities_find_requires_filter():
     with pytest.raises(HarmonyError):
         await entities.entities_find(_settings(), start_date="2026-06-01T00:00:00Z")
-    with pytest.raises(HarmonyError):
-        await entities.entities_find(_settings(), sender="a@b.com")
 
 
 @respx.mock
