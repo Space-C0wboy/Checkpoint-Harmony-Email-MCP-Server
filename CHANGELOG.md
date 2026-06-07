@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-06-06
+
+### Changed
+- `events_find` now caps results to a `limit` (default 25), stopping the page scan early
+  once enough matches are collected, and returns a `truncated` flag (`true` when the limit
+  or the page-scan cap was hit). This prevents oversized responses when a sender matches
+  thousands of events. `entities_find` was already capped.
+
+[0.2.3]: https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server/releases/tag/v0.2.3
+
 ## [0.2.2] - 2026-06-06
 
 ### Changed
