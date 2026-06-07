@@ -7,3 +7,7 @@ build/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Internal development artifacts (not for the public repo)
+docs/superpowers/
+spec.json
