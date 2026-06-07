@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-06-06
+
+First published release on PyPI. No functional changes to the MCP tools since 0.2.3 —
+this release covers packaging and repository hardening.
+
+### Changed
+- CI installs dependencies via `uv sync` + runs through `uv run`, replacing a
+  `uv pip install --system` step that failed on the runner's externally-managed
+  system Python (PEP 668).
+- The publish workflow now verifies the pushed tag matches the `pyproject.toml` version
+  and runs `twine check` on the built artifacts before uploading.
+
+### Removed
+- Internal development docs (design specs and plans) and the vendored OpenAPI spec are no
+  longer tracked in the repository.
+
+[0.2.4]: https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server/releases/tag/v0.2.4
+
 ## [0.2.3] - 2026-06-06
 
 ### Changed
