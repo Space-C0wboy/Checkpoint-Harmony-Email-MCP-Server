@@ -75,13 +75,15 @@ async def events_find(
     start_date: str | None = None,
     end_date: str | None = None,
     max_pages: int = 20,
+    limit: int = 25,
     full: bool = False,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Find security events by sender / text_contains / entity_id / event_id. Narrows
     server-side (a `description` substring pre-filter, or `eventIds` for event_id) then
     refines client-side, auto-relaxing exact->contains for sender. Defaults to the last
-    30 days. Returns {matches, matchMode, pagesScanned, scanCapHit, totalInWindow}.
+    30 days. Returns {matches, matchMode, pagesScanned, scanCapHit, totalInWindow,
+    truncated}. `limit` (default 25) caps matches; the scan stops early once reached.
     Requires >=1 filter; start_date/end_date are optional."""
     if not any([sender, text_contains, entity_id, event_id]):
         raise HarmonyError(
@@ -99,10 +101,11 @@ async def events_find(
         if prefilter:
             base["description"] = prefilter
 
-    async def _scan(c: HarmonyClient, sender_mode: str) -> tuple[list, int, bool, Any]:
+    async def _scan(c: HarmonyClient, sender_mode: str) -> tuple[list, int, bool, Any, bool]:
         matches: list[dict[str, Any]] = []
         pages = 0
         scan_cap_hit = False
+        limit_hit = False
         total: Any = None
         rd = dict(base)
         while True:
@@ -125,21 +128,26 @@ async def events_find(
                     matches.append(ev if full else _compact_event(ev))
             pages += 1
             scroll = env.get("scrollId")
+            # Natural exhaustion first: if the window is fully seen, it is not truncated
+            # even if we happened to reach the limit on the final page.
             if not page or not scroll:
+                break
+            if len(matches) >= limit:
+                limit_hit = True
                 break
             if pages >= max_pages:
                 scan_cap_hit = True
                 break
             rd = {**base, "scrollId": scroll}
-        return matches, pages, scan_cap_hit, total
+        return matches[:limit], pages, scan_cap_hit, total, limit_hit
 
     async with acquire_client(settings, client) as c:
-        matches, pages, scan_cap_hit, total = await _scan(c, "exact")
+        matches, pages, scan_cap_hit, total, limit_hit = await _scan(c, "exact")
         mode = "exact"
         if not matches and sender:
             # The description pre-filter still narrows server-side; only the client-side
             # sender comparison relaxes from exact to contains on this second pass.
-            matches, pages, scan_cap_hit, total = await _scan(c, "contains")
+            matches, pages, scan_cap_hit, total, limit_hit = await _scan(c, "contains")
             mode = "contains"
     if not matches:
         mode = "none"
@@ -148,7 +156,7 @@ async def events_find(
         # (event_id/entity_id); a text_contains-only match is inherently substring.
         mode = "exact" if (event_id or entity_id) else "contains"
     return {"matches": matches, "matchMode": mode, "pagesScanned": pages,
-            "scanCapHit": scan_cap_hit, "totalInWindow": total}
+            "scanCapHit": scan_cap_hit, "totalInWindow": total, "truncated": limit_hit or scan_cap_hit}
 
 
 async def events_action(
@@ -243,15 +251,16 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
         sender: str | None = None, text_contains: str | None = None,
         entity_id: str | None = None, event_id: str | None = None,
         start_date: str | None = None, end_date: str | None = None,
-        max_pages: int = 20, full: bool = False,
+        max_pages: int = 20, limit: int = 25, full: bool = False,
     ) -> dict[str, Any]:
         """Find events by sender/text_contains/entity_id/event_id. Narrows server-side
         then refines (auto-relaxes exact->contains for sender); defaults to the last 30
-        days. Returns matches + {matchMode, pagesScanned, scanCapHit, totalInWindow}."""
+        days. `limit` (default 25) caps matches. Returns matches +
+        {matchMode, pagesScanned, scanCapHit, totalInWindow, truncated}."""
         return await events_find(
             settings, sender=sender, text_contains=text_contains, entity_id=entity_id,
             event_id=event_id, start_date=start_date, end_date=end_date,
-            max_pages=max_pages, full=full, client=client,
+            max_pages=max_pages, limit=limit, full=full, client=client,
         )
 
     @app.tool(name="events_action")

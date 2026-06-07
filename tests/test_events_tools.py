@@ -345,3 +345,31 @@ async def test_events_action_bulk_returns_summary():
     )
     assert out["summary"]["total"] == 2 and out["summary"]["completed"] == 2
     assert {t["entityId"] for t in out["tasks"]} == {"ENT1", "ENT2"}
+
+
+@respx.mock
+async def test_events_find_limit_caps_and_truncates():
+    _auth()
+    ev = {**_event("E1"), "senderAddress": "bad@x.com"}
+    route = respx.post(f"{API_URL}/v1.0/event/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 99, "scrollId": "S1"},
+                                  "responseData": [ev, ev, ev]}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 99, "scrollId": "S2"},
+                                  "responseData": [ev]}),
+    ])
+    out = await events.events_find(_settings(), sender="bad@x.com", start_date="2026-06-01T00:00:00Z", limit=2)
+    assert len(out["matches"]) == 2
+    assert out["truncated"] is True
+    assert out["pagesScanned"] == 1          # early-stopped after the first page
+    assert route.call_count == 1             # did NOT fetch the second page
+
+
+@respx.mock
+async def test_events_find_not_truncated_when_fully_scanned():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""},
+        "responseData": [{**_event("E1"), "senderAddress": "bad@x.com"}]}))
+    out = await events.events_find(_settings(), sender="bad@x.com", start_date="2026-06-01T00:00:00Z")
+    assert out["truncated"] is False
+    assert len(out["matches"]) == 1
