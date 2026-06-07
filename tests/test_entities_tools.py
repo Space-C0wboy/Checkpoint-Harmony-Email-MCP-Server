@@ -259,3 +259,21 @@ async def test_entities_download_404_raises():
     from checkpoint_harmony_mcp.errors import HarmonyError, ApiError
     with pytest.raises((HarmonyError, ApiError)):
         await entities.entities_download(_settings(), entity_id="missing")
+
+
+@respx.mock
+async def test_entities_query_extended_filter_accepts_json_string():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(
+        return_value=httpx.Response(200, json={"responseData": []}))
+    import json as _json
+    await entities.entities_query(
+        _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
+        extended_filter=_json.dumps([
+            {"saasAttrName": "entityPayload.fromEmail", "saasAttrOp": "is", "saasAttrValue": "a@b.com"}
+        ]),
+    )
+    body = _json.loads(route.calls.last.request.read())
+    ef = body["requestData"]["entityExtendedFilter"]
+    assert ef[0]["saasAttrName"] == "entityPayload.fromEmail"
+    assert ef[0]["saasAttrOp"] == "is"

@@ -1,4 +1,5 @@
 import base64
+import json
 import re
 from typing import Any
 
@@ -70,7 +71,7 @@ async def entities_download(
 async def entities_query(
     settings: Settings,
     entity_filter: dict[str, Any],
-    extended_filter: list[Any] | None = None,
+    extended_filter: list[dict[str, Any]] | str | None = None,
     scroll_id: str | None = None,
     limit: int = 25,
     full: bool = False,
@@ -87,6 +88,15 @@ async def entities_query(
 
     `max_records` (cap 500) auto-paginates and governs the returned count (overrides
     `limit`). `count_only=True` returns {recordsNumber, histogram}. `full=True` for raw."""
+    if isinstance(extended_filter, str):
+        try:
+            extended_filter = json.loads(extended_filter)
+        except json.JSONDecodeError as exc:
+            raise HarmonyError(f"extended_filter must be a JSON array: {exc}") from exc
+    if extended_filter is not None and not isinstance(extended_filter, list):
+        raise HarmonyError(
+            "extended_filter must be a list of {saasAttrName, saasAttrOp, saasAttrValue} objects"
+        )
     request_data: dict[str, Any] = {"entityFilter": entity_filter}
     if extended_filter is not None:
         request_data["entityExtendedFilter"] = extended_filter
@@ -245,7 +255,7 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="entities_query")
     async def _entities_query(
-        entity_filter: dict[str, Any], extended_filter: list[Any] | None = None,
+        entity_filter: dict[str, Any], extended_filter: list[dict[str, Any]] | None = None,
         scroll_id: str | None = None, limit: int = 25, full: bool = False,
         max_records: int | None = None, count_only: bool = False,
     ) -> dict[str, Any]:
