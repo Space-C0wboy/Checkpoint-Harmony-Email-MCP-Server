@@ -277,3 +277,20 @@ async def test_entities_query_extended_filter_accepts_json_string():
     ef = body["requestData"]["entityExtendedFilter"]
     assert ef[0]["saasAttrName"] == "entityPayload.fromEmail"
     assert ef[0]["saasAttrOp"] == "is"
+    assert ef[0]["saasAttrValue"] == "a@b.com"
+
+
+async def test_entities_query_extended_filter_rejects_bad_json_string():
+    with pytest.raises(HarmonyError, match="JSON array"):
+        await entities.entities_query(
+            _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
+            extended_filter="not json",
+        )
+
+
+async def test_entities_query_extended_filter_rejects_non_list():
+    with pytest.raises(HarmonyError, match="list of"):
+        await entities.entities_query(
+            _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
+            extended_filter='{"saasAttrName": "x"}',  # JSON object, not an array
+        )
