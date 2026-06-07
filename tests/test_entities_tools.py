@@ -339,3 +339,36 @@ async def test_entities_query_extended_filter_rejects_non_list():
             _settings(), entity_filter={"saas": "office365_emails", "startDate": "x"},
             extended_filter='{"saasAttrName": "x"}',  # JSON object, not an array
         )
+
+
+@respx.mock
+async def test_entities_find_fallback_second_request_uses_contains():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/search/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}),
+    ])
+    out = await entities.entities_find(_settings(), sender="proton.me", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "contains"
+    import json as _json
+    # two requests were made; the second (fallback) must use the contains operator
+    first = _json.loads(route.calls[0].request.read())["requestData"]["entityExtendedFilter"]
+    second = _json.loads(route.calls[1].request.read())["requestData"]["entityExtendedFilter"]
+    assert first[0]["saasAttrOp"] == "is"
+    assert second[0]["saasAttrOp"] == "contains"
+    assert second[0]["saasAttrName"] == "entityPayload.fromEmail"
+
+
+@respx.mock
+async def test_entities_find_entity_id_with_other_filter_goes_to_query():
+    _auth()
+    g = respx.get(f"{API_URL}/v1.0/search/entity/ENT1").mock(return_value=httpx.Response(200, json={"responseData": []}))
+    q = respx.post(f"{API_URL}/v1.0/search/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_entity("E1")]}))
+    await entities.entities_find(_settings(), entity_id="ENT1", sender="a@b.com", start_date="2026-06-01T00:00:00Z")
+    # combined with another filter -> NOT a short-circuit GET; uses /search/query with entityInfo.entityId
+    assert q.called and not g.called
+    import json as _json
+    ef = _json.loads(q.calls.last.request.read())["requestData"]["entityExtendedFilter"]
+    names = {c["saasAttrName"] for c in ef}
+    assert "entityInfo.entityId" in names and "entityPayload.fromEmail" in names
