@@ -61,6 +61,7 @@ Exceptions, URL Reputation, DLP, and Scopes — full parity with the v1.50 API.
   sender, recipient, subject, message-ID, or entity-ID. They filter **server-side** and
   default to the **last 30 days** (override with `start_date`/`end_date`), trying an exact
   match first and falling back to `contains` — the result's `matchMode` says which hit.
+  Both cap returned matches to `limit` (default 25) and set `truncated` when more exist.
   Power users can pass a raw server-side `extended_filter` to `entities_query`.
 - **Action tools** (`events_action`, `entities_action`) wait for completion by default and
   return the final entity state; pass `wait=false` for fire-and-forget. `entities_action`
