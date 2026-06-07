@@ -187,11 +187,58 @@ async def test_events_find_by_sender():
 
 
 @respx.mock
-async def test_events_find_requires_filter_and_date():
+async def test_events_find_requires_filter():
     with pytest.raises(HarmonyError):
         await events.events_find(_settings(), start_date="2026-06-01T00:00:00Z")
-    with pytest.raises(HarmonyError):
-        await events.events_find(_settings(), sender="x@y.com")
+
+
+@respx.mock
+async def test_events_find_uses_description_prefilter():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""},
+        "responseData": [{**_event("E1"), "senderAddress": "bad@x.com"}]}))
+    out = await events.events_find(_settings(), sender="bad@x.com", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "exact" and len(out["matches"]) == 1
+    import json as _json
+    rd = _json.loads(route.calls.last.request.read())["requestData"]
+    assert rd["description"] == "bad@x.com"
+
+
+@respx.mock
+async def test_events_find_event_id_uses_event_ids_filter():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 1, "scrollId": ""}, "responseData": [_event("E1")]}))
+    out = await events.events_find(_settings(), event_id="E1", start_date="2026-06-01T00:00:00Z")
+    import json as _json
+    rd = _json.loads(route.calls.last.request.read())["requestData"]
+    assert rd["eventIds"] == ["E1"]
+    assert len(out["matches"]) == 1
+
+
+@respx.mock
+async def test_events_find_sender_falls_back_to_contains():
+    _auth()
+    respx.post(f"{API_URL}/v1.0/event/query").mock(side_effect=[
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 1, "scrollId": ""},
+                                  "responseData": [{**_event("E1"), "senderAddress": "real-bad@x.com"}]}),
+        httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 1, "scrollId": ""},
+                                  "responseData": [{**_event("E1"), "senderAddress": "real-bad@x.com"}]}),
+    ])
+    out = await events.events_find(_settings(), sender="bad@x.com", start_date="2026-06-01T00:00:00Z")
+    assert out["matchMode"] == "contains" and len(out["matches"]) == 1
+
+
+@respx.mock
+async def test_events_find_defaults_window_when_no_start_date():
+    _auth()
+    route = respx.post(f"{API_URL}/v1.0/event/query").mock(return_value=httpx.Response(200, json={
+        "responseEnvelope": {"recordsNumber": 0, "scrollId": ""}, "responseData": []}))
+    await events.events_find(_settings(), sender="a@b.com")
+    import json as _json
+    rd = _json.loads(route.calls.last.request.read())["requestData"]
+    assert rd.get("startDate")
 
 
 @respx.mock
