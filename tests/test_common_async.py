@@ -3,6 +3,16 @@ import time as _time
 import httpx
 import respx
 
+
+def test_default_window_passthrough_and_default():
+    from datetime import datetime, timezone
+    from checkpoint_harmony_mcp.tools._common import default_window
+    assert default_window("2026-01-01T00:00:00Z") == "2026-01-01T00:00:00Z"
+    got = default_window(None)
+    parsed = datetime.strptime(got, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    delta_days = (datetime.now(timezone.utc) - parsed).days
+    assert 29 <= delta_days <= 31
+
 from checkpoint_harmony_mcp.client import HarmonyClient
 from checkpoint_harmony_mcp.config import Settings
 from checkpoint_harmony_mcp.tools._common import (
