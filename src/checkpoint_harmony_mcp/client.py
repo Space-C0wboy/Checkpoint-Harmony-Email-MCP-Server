@@ -44,24 +44,35 @@ class HarmonyClient:
         that pass ``bucket=name`` will await this bucket before issuing the HTTP request."""
         self._buckets[name] = TokenBucket(rate_per_sec, burst)
 
-    async def get(self, path: str, params: dict[str, Any] | None = None, bucket: str | None = None) -> dict[str, Any]:
+    async def get(
+        self, path: str, params: dict[str, Any] | None = None, bucket: str | None = None
+    ) -> dict[str, Any]:
         return await self._request("GET", path, params=params, bucket=bucket)
 
     async def post(
-        self, path: str, json: dict[str, Any] | None = None,
-        params: dict[str, Any] | None = None, bucket: str | None = None,
+        self,
+        path: str,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+        bucket: str | None = None,
     ) -> dict[str, Any]:
         return await self._request("POST", path, json=json, params=params, bucket=bucket)
 
     async def put(
-        self, path: str, json: dict[str, Any] | None = None,
-        params: dict[str, Any] | None = None, bucket: str | None = None,
+        self,
+        path: str,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+        bucket: str | None = None,
     ) -> dict[str, Any]:
         return await self._request("PUT", path, json=json, params=params, bucket=bucket)
 
     async def delete(
-        self, path: str, params: dict[str, Any] | None = None,
-        json: dict[str, Any] | None = None, bucket: str | None = None,
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        bucket: str | None = None,
     ) -> dict[str, Any]:
         return await self._request("DELETE", path, params=params, json=json, bucket=bucket)
 
@@ -76,7 +87,9 @@ class HarmonyClient:
         for attempt in range(_MAX_429_RETRIES + 1):
             token = await self._auth.get_token()
             resp = await self._http.request(
-                "GET", path, params=params,
+                "GET",
+                path,
+                params=params,
                 headers=self._headers(token, scope),
                 timeout=self._settings.checkpoint_timeout,
             )
@@ -115,12 +128,19 @@ class HarmonyClient:
     async def _discover_scope(self) -> str:
         token = await self._auth.get_token()
         resp = await self._http.request(
-            "GET", _SCOPES_PATH,
-            headers={"Authorization": f"Bearer {token}", "x-av-req-id": str(uuid.uuid4()), "scopes": ""},
+            "GET",
+            _SCOPES_PATH,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "x-av-req-id": str(uuid.uuid4()),
+                "scopes": "",
+            },
             timeout=self._settings.checkpoint_timeout,
         )
         if resp.status_code >= 400:
-            raise ApiError(f"Scope discovery failed {resp.status_code}", status_code=resp.status_code)
+            raise ApiError(
+                f"Scope discovery failed {resp.status_code}", status_code=resp.status_code
+            )
         data = (resp.json() or {}).get("responseData") or []
         if not data:
             raise HarmonyError("No scopes available for these credentials")

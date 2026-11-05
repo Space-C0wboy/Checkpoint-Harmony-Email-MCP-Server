@@ -72,9 +72,13 @@ async def test_missing_token_raises():
 @respx.mock
 async def test_uses_expires_iso_when_no_expiresin():
     from datetime import datetime, timedelta, timezone
+
     iso = (datetime.now(timezone.utc) + timedelta(seconds=120)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    respx.post(AUTH_URL).mock(return_value=httpx.Response(
-        200, json={"success": True, "data": {"token": "abc", "expires": iso}}))
+    respx.post(AUTH_URL).mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "data": {"token": "abc", "expires": iso}}
+        )
+    )
     async with httpx.AsyncClient() as http:
         tm = TokenManager(_settings(), http)
         assert await tm.get_token() == "abc"
@@ -84,16 +88,20 @@ async def test_uses_expires_iso_when_no_expiresin():
 @respx.mock
 async def test_naive_expires_falls_back_to_default_ttl():
     # no timezone -> naive datetime; subtracting it from an aware now raises TypeError, which must not escape
-    respx.post(AUTH_URL).mock(return_value=httpx.Response(
-        200, json={"success": True, "data": {"token": "abc", "expires": "2099-01-01T00:00:00"}}))
+    respx.post(AUTH_URL).mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "data": {"token": "abc", "expires": "2099-01-01T00:00:00"}}
+        )
+    )
     async with httpx.AsyncClient() as http:
         assert await TokenManager(_settings(), http).get_token() == "abc"
 
 
 @respx.mock
 async def test_default_ttl_when_no_expiry_fields():
-    respx.post(AUTH_URL).mock(return_value=httpx.Response(
-        200, json={"success": True, "data": {"token": "abc"}}))
+    respx.post(AUTH_URL).mock(
+        return_value=httpx.Response(200, json={"success": True, "data": {"token": "abc"}})
+    )
     async with httpx.AsyncClient() as http:
         tm = TokenManager(_settings(), http)
         assert await tm.get_token() == "abc"

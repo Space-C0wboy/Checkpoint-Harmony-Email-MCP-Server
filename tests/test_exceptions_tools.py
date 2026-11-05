@@ -10,8 +10,11 @@ API_URL = "https://gw.example/app/hec-api"
 
 def _settings():
     return Settings(
-        checkpoint_client_id="cid", checkpoint_secret="sec",
-        checkpoint_auth_url=AUTH_URL, checkpoint_api_url=API_URL, checkpoint_scope="s1",
+        checkpoint_client_id="cid",
+        checkpoint_secret="sec",
+        checkpoint_auth_url=AUTH_URL,
+        checkpoint_api_url=API_URL,
+        checkpoint_scope="s1",
     )
 
 
@@ -82,8 +85,11 @@ async def test_delete():
 async def test_exc_type_case_insensitive():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/exceptions/blacklist").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
-    await exceptions.exceptions_create(_settings(), exc_type="BlackList", fields={"senderEmail": "a@b.com"})
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
+    await exceptions.exceptions_create(
+        _settings(), exc_type="BlackList", fields={"senderEmail": "a@b.com"}
+    )
     assert route.called
 
 
@@ -91,13 +97,17 @@ async def test_exc_type_case_insensitive():
 async def test_exceptions_create_no_scope_in_query_or_body():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/exceptions/whitelist").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
     await exceptions.exceptions_create(
-        _settings(), exc_type="whitelist", fields={"senderEmail": "a@b.com"},
+        _settings(),
+        exc_type="whitelist",
+        fields={"senderEmail": "a@b.com"},
     )
     req = route.calls.last.request
     assert "scope" not in dict(req.url.params)
     import json as _json
+
     body = _json.loads(req.read())
     assert "scope" not in body["requestData"]
 
@@ -106,8 +116,11 @@ async def test_exceptions_create_no_scope_in_query_or_body():
 async def test_spam_whitelist_path_passes_through():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/exceptions/spam_whitelist").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
     await exceptions.exceptions_create(
-        _settings(), exc_type="SPAM_WHITELIST", fields={"senderEmail": "a@b.com"},
+        _settings(),
+        exc_type="SPAM_WHITELIST",
+        fields={"senderEmail": "a@b.com"},
     )
     assert route.called
