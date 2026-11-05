@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-11-05
+
+### Changed
+- Moved to **fastmcp 4** (from 3.4) (mcp SDK 2.3). Tool input schemas now carry `additionalProperties: false`, so calls with unexpected arguments are rejected.
+- Dependency updates, including security fixes: authlib 1.9.1, joserfc 1.7.6, opentelemetry-api 1.45.1, mcp 1.30.
+
+### CI
+- Workflows run with a read-only token by default; jobs that publish get only the grants they need.
+- ruff pinned at 0.17.3 with a `ruff format --check` step; the codebase is formatted.
+- Lint rules now match the other servers (`E, F, I, UP, B, W`); Dependabot runs weekly.
+
 ## [0.2.4] - 2026-06-06
 
 First published release on PyPI. No functional changes to the MCP tools since 0.2.3 —

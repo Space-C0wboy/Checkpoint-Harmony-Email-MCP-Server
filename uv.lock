@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "checkpoint-harmony-mcp"
-version = "0.2.5b1"
+version = "0.2.5"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
