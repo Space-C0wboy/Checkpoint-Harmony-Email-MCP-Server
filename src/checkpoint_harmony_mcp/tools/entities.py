@@ -7,10 +7,13 @@ from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
 from ._common import (
-    acquire_client, apply_view, aggregate_action_results, default_window, paginate,
+    acquire_client,
+    aggregate_action_results,
+    apply_view,
+    default_window,
+    paginate,
     wait_for_task,
 )
-
 
 _FILENAME_RE = re.compile(r'filename\*?=("([^"]+)"|([^;]+))', re.IGNORECASE)
 

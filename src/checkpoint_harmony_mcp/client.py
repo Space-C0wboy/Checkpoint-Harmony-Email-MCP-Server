@@ -32,7 +32,7 @@ class HarmonyClient:
         self._scope: str | None = settings.checkpoint_scope or None
         self._buckets: dict[str, TokenBucket] = {}
 
-    async def __aenter__(self) -> "HarmonyClient":
+    async def __aenter__(self) -> "HarmonyClient":  # noqa: PYI034 -- typing.Self needs 3.11; we support 3.10
         return self
 
     async def __aexit__(self, *exc: object) -> None:

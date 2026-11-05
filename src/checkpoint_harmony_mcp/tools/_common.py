@@ -2,9 +2,10 @@ import asyncio
 import json
 import re
 import time as _time_mod
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable
+from typing import TYPE_CHECKING, Any
 
 from ..config import Settings
 
@@ -74,7 +75,7 @@ def clean_description(text):
     def _repl(m: "re.Match[str]") -> str:
         try:
             obj = json.loads(m.group(1))
-        except Exception:
+        except ValueError:
             return ""
         return str(obj.get("label") or obj.get("display") or "")
 
@@ -177,7 +178,7 @@ async def aggregate_action_results(
         if tid:
             try:
                 norm = await wait_for_task(client, tid, timeout=timeout)
-            except Exception as exc:  # one task's poll error MUST NOT poison the whole batch
+            except Exception as exc:  # noqa: BLE001 -- one task's poll error MUST NOT poison the whole batch
                 norm = {"status": "failed", "message": f"task poll failed: {exc}"}
         else:
             norm = {"status": "failed", "message": "no taskId"}
@@ -194,7 +195,7 @@ async def aggregate_action_results(
                     "isRestored": payload.get("isRestored"),
                     "entityActionState": info.get("entityActionState"),
                 }
-            except Exception:  # never let one entity fetch poison the whole result
+            except Exception:  # noqa: BLE001 -- never let one entity fetch poison the whole result
                 final_state = None
         return {
             "entityId": eid,

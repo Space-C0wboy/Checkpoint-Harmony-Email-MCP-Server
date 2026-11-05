@@ -4,8 +4,15 @@ from ..client import HarmonyClient
 from ..config import Settings
 from ..errors import HarmonyError
 from ._common import (
-    acquire_client, apply_view, clean_description, aggregate_action_results,
-    default_window, normalize_task_status, paginate, record_matches, wait_for_task,
+    acquire_client,
+    aggregate_action_results,
+    apply_view,
+    clean_description,
+    default_window,
+    normalize_task_status,
+    paginate,
+    record_matches,
+    wait_for_task,
 )
 
 _EVENT_FIELDS = (

@@ -1,5 +1,8 @@
 from checkpoint_harmony_mcp.errors import (
-    HarmonyError, AuthError, ApiError, RateLimitError,
+    ApiError,
+    AuthError,
+    HarmonyError,
+    RateLimitError,
 )
 
 

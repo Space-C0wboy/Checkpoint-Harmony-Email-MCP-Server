@@ -45,7 +45,7 @@ async def test_paginate_aggregates_until_scroll_exhausted():
         httpx.Response(200, json={"responseEnvelope": {"recordsNumber": 3, "scrollId": "S2"}, "responseData": [{"id": 3}]}),
     ])
     async with HarmonyClient(_settings()) as c:
-        records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=100)
+        records, _env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=100)
     assert [r["id"] for r in records] == [1, 2, 3]
     assert truncated is False
 
@@ -56,7 +56,7 @@ async def test_paginate_stops_at_cap_and_flags_truncated():
     respx.post(f"{API}/v1.0/search/query").mock(return_value=httpx.Response(
         200, json={"responseEnvelope": {"recordsNumber": 9, "scrollId": "S1"}, "responseData": [{"id": 1}, {"id": 2}]}))
     async with HarmonyClient(_settings()) as c:
-        records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
+        records, _env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
     assert len(records) == 2
     assert truncated is True
 
@@ -89,7 +89,7 @@ async def test_paginate_not_truncated_when_cap_equals_total():
     respx.post(f"{API}/v1.0/search/query").mock(return_value=httpx.Response(
         200, json={"responseEnvelope": {"recordsNumber": 2, "scrollId": "S1"}, "responseData": [{"id": 1}, {"id": 2}]}))
     async with HarmonyClient(_settings()) as c:
-        records, env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
+        records, _env, truncated = await paginate(c, "/v1.0/search/query", {"entityFilter": {}}, max_records=2)
     assert len(records) == 2
     assert truncated is False
 

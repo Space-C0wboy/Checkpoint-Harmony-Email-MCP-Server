@@ -11,13 +11,13 @@ API_URL = "https://gw.example/app/hec-api"
 
 
 def _settings(**over):
-    base = dict(
-        checkpoint_client_id="cid",
-        checkpoint_secret="sec",
-        checkpoint_auth_url=AUTH_URL,
-        checkpoint_api_url=API_URL,
-        checkpoint_scope="scope-1",
-    )
+    base = {
+        "checkpoint_client_id": "cid",
+        "checkpoint_secret": "sec",
+        "checkpoint_auth_url": AUTH_URL,
+        "checkpoint_api_url": API_URL,
+        "checkpoint_scope": "scope-1",
+    }
     base.update(over)
     return Settings(**base)
 

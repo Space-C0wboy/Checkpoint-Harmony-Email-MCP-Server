@@ -301,7 +301,7 @@ async def test_entities_download_returns_filename_and_base64():
 async def test_entities_download_404_raises():
     _auth()
     respx.get(f"{API_URL}/v1.0/download/entity/missing").mock(return_value=httpx.Response(404, text="nope"))
-    from checkpoint_harmony_mcp.errors import HarmonyError, ApiError
+    from checkpoint_harmony_mcp.errors import ApiError, HarmonyError
     with pytest.raises((HarmonyError, ApiError)):
         await entities.entities_download(_settings(), entity_id="missing")
 
