@@ -18,7 +18,7 @@ def build_server() -> FastMCP:
     client.set_bucket("exceptions_ap", rate_per_sec=1.0, burst=1)
     client.set_bucket("exceptions_other", rate_per_sec=10.0, burst=10)
 
-    from .tools import scopes, events, entities, exceptions, sectool_exceptions
+    from .tools import entities, events, exceptions, scopes, sectool_exceptions
 
     scopes.register(app, settings, client)
     events.register(app, settings, client)

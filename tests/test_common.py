@@ -1,6 +1,8 @@
-from checkpoint_harmony_mcp.tools._common import apply_view
 from checkpoint_harmony_mcp.tools._common import (
-    clean_description, record_matches, normalize_task_status,
+    apply_view,
+    clean_description,
+    normalize_task_status,
+    record_matches,
 )
 
 

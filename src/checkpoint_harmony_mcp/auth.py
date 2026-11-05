@@ -62,7 +62,7 @@ class TokenManager:
                 from datetime import datetime, timezone
                 exp_iso = data["expires"].replace("Z", "+00:00")
                 ttl = int((datetime.fromisoformat(exp_iso) - datetime.now(timezone.utc)).total_seconds())
-            except Exception:
+            except (ValueError, TypeError):  # bad ISO string, or a naive timestamp vs aware now
                 ttl = None
         try:
             ttl = int(ttl) if ttl is not None else _DEFAULT_EXPIRES_IN
