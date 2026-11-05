@@ -23,6 +23,7 @@ async def acquire_client(
     caller (the server). A short-lived client is opened and closed per call.
     """
     from ..client import HarmonyClient
+
     if client is not None:
         yield client
     else:
@@ -89,7 +90,9 @@ def _cmp(actual: Any, expected: str, mode: str) -> bool:
     if mode == "contains":
         return isinstance(actual, str) and e in actual.lower()
     if mode == "in":
-        return isinstance(actual, list) and any(isinstance(x, str) and x.lower() == e for x in actual)
+        return isinstance(actual, list) and any(
+            isinstance(x, str) and x.lower() == e for x in actual
+        )
     return False
 
 
@@ -110,7 +113,14 @@ def normalize_task_status(task_json: dict[str, Any]) -> dict[str, Any]:
         status = "completed"
     else:
         status = "inprogress"
-    inner = [{"name": a.get("action_name"), "status": a.get("action_status"), "message": a.get("action_message")} for a in actions]
+    inner = [
+        {
+            "name": a.get("action_name"),
+            "status": a.get("action_status"),
+            "message": a.get("action_message"),
+        }
+        for a in actions
+    ]
     message = "; ".join(filter(None, (a.get("action_message") for a in actions)))
     return {"status": status, "message": message, "actions": inner, "raw": task_json}
 

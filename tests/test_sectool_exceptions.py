@@ -12,23 +12,29 @@ API_URL = "https://gw.example/app/hec-api"
 
 def _settings():
     return Settings(
-        checkpoint_client_id="cid", checkpoint_secret="sec",
-        checkpoint_auth_url=AUTH_URL, checkpoint_api_url=API_URL, checkpoint_scope="s1",
+        checkpoint_client_id="cid",
+        checkpoint_secret="sec",
+        checkpoint_auth_url=AUTH_URL,
+        checkpoint_api_url=API_URL,
+        checkpoint_scope="s1",
     )
 
 
 def _auth():
-    respx.post(AUTH_URL).mock(return_value=httpx.Response(
-        200, json={"success": True, "data": {"token": "tok"}}))
+    respx.post(AUTH_URL).mock(
+        return_value=httpx.Response(200, json={"success": True, "data": {"token": "tok"}})
+    )
 
 
 # ---------- URL Reputation ----------
+
 
 @respx.mock
 async def test_urlrep_list():
     _auth()
     respx.get(f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions/block-domain").mock(
-        return_value=httpx.Response(200, json={"responseData": []}))
+        return_value=httpx.Response(200, json={"responseData": []})
+    )
     out = await sx.urlrep_list(_settings(), exception_type="block-domain")
     assert out == {"responseData": []}
 
@@ -36,9 +42,14 @@ async def test_urlrep_list():
 @respx.mock
 async def test_urlrep_get():
     _auth()
-    respx.get(f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions/block-domain/evil.example").mock(
-        return_value=httpx.Response(200, json={"responseData": [{"exception_str": "evil.example"}]}))
-    out = await sx.urlrep_get(_settings(), exception_type="block-domain", exception_str="evil.example")
+    respx.get(
+        f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions/block-domain/evil.example"
+    ).mock(
+        return_value=httpx.Response(200, json={"responseData": [{"exception_str": "evil.example"}]})
+    )
+    out = await sx.urlrep_get(
+        _settings(), exception_type="block-domain", exception_str="evil.example"
+    )
     assert out["responseData"][0]["exception_str"] == "evil.example"
 
 
@@ -46,10 +57,15 @@ async def test_urlrep_get():
 async def test_urlrep_create():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/sectool-exceptions/avanan_url").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
-    await sx.urlrep_create(_settings(), exception_type="block-domain",
-                           fields={"exception_str": "evil.example", "comment": "test"})
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
+    await sx.urlrep_create(
+        _settings(),
+        exception_type="block-domain",
+        fields={"exception_str": "evil.example", "comment": "test"},
+    )
     import json as _json
+
     body = _json.loads(route.calls.last.request.read())
     assert body["requestData"]["exception_type"] == "block-domain"
     assert body["requestData"]["exception_str"] == "evil.example"
@@ -59,9 +75,13 @@ async def test_urlrep_create():
 async def test_urlrep_update():
     _auth()
     route = respx.put(f"{API_URL}/v1.0/sectool-exceptions/avanan_url").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
-    await sx.urlrep_update(_settings(), exception_type="block-domain",
-                           fields={"exception_str": "evil.example", "comment": "updated"})
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
+    await sx.urlrep_update(
+        _settings(),
+        exception_type="block-domain",
+        fields={"exception_str": "evil.example", "comment": "updated"},
+    )
     assert route.called
 
 
@@ -69,13 +89,18 @@ async def test_urlrep_update():
 async def test_urlrep_delete():
     _auth()
     route = respx.delete(f"{API_URL}/v1.0/sectool-exceptions/avanan_url/exceptions").mock(
-        return_value=httpx.Response(204))
-    out = await sx.urlrep_delete(_settings(), exception_type="block-domain", exception_str="evil.example")
+        return_value=httpx.Response(204)
+    )
+    out = await sx.urlrep_delete(
+        _settings(), exception_type="block-domain", exception_str="evil.example"
+    )
     assert out == {}
     import json as _json
+
     body = _json.loads(route.calls.last.request.read())
     assert body["requestData"] == {
-        "exception_type": "block-domain", "exception_str_list": ["evil.example"]
+        "exception_type": "block-domain",
+        "exception_str_list": ["evil.example"],
     }
 
 
@@ -83,13 +108,18 @@ async def test_urlrep_delete():
 async def test_dlp_delete():
     _auth()
     route = respx.delete(f"{API_URL}/v1.0/sectool-exceptions/avanan_dlp/exceptions").mock(
-        return_value=httpx.Response(204))
-    out = await sx.dlp_delete(_settings(), exception_type="sender_email", exception_str="ok@trusted.com")
+        return_value=httpx.Response(204)
+    )
+    out = await sx.dlp_delete(
+        _settings(), exception_type="sender_email", exception_str="ok@trusted.com"
+    )
     assert out == {}
     import json as _json
+
     body = _json.loads(route.calls.last.request.read())
     assert body["requestData"] == {
-        "exception_type": "sender_email", "exception_str_list": ["ok@trusted.com"]
+        "exception_type": "sender_email",
+        "exception_str_list": ["ok@trusted.com"],
     }
 
 
@@ -103,25 +133,33 @@ async def test_urlrep_create_ignores_exception_type_in_fields():
     """Caller-supplied exception_type in fields must not override the validated kwarg."""
     _auth()
     route = respx.post(f"{API_URL}/v1.0/sectool-exceptions/avanan_url").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
     await sx.urlrep_create(
-        _settings(), exception_type="allow-url",
+        _settings(),
+        exception_type="allow-url",
         fields={"exception_type": "block-url", "exception_str": "x.example", "comment": "c"},
     )
     import json as _json
+
     body = _json.loads(route.calls.last.request.read())
     assert body["requestData"]["exception_type"] == "allow-url"  # validated kwarg wins
 
 
 # ---------- DLP ----------
 
+
 @respx.mock
 async def test_dlp_create():
     _auth()
     route = respx.post(f"{API_URL}/v1.0/sectool-exceptions/avanan_dlp").mock(
-        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}}))
-    await sx.dlp_create(_settings(), exception_type="sender_email",
-                        fields={"exception_str": "ok@trusted.com", "comment": "exec"})
+        return_value=httpx.Response(200, json={"responseEnvelope": {"responseCode": 0}})
+    )
+    await sx.dlp_create(
+        _settings(),
+        exception_type="sender_email",
+        fields={"exception_str": "ok@trusted.com", "comment": "exec"},
+    )
     assert route.called
 
 

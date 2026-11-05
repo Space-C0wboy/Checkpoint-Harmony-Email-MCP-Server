@@ -11,12 +11,11 @@ _DLP_TYPES = ("hash", "text_content", "sender_email", "recipient_email")
 
 def _validate_type(family: str, exception_type: str, allowed: tuple[str, ...]) -> None:
     if exception_type not in allowed:
-        raise HarmonyError(
-            f"{family} exception_type must be one of: " + ", ".join(allowed)
-        )
+        raise HarmonyError(f"{family} exception_type must be one of: " + ", ".join(allowed))
 
 
 # -- URL Reputation (/v1.0/sectool-exceptions/avanan_url) --
+
 
 async def urlrep_list(
     settings: Settings, exception_type: str, client: HarmonyClient | None = None
@@ -29,7 +28,9 @@ async def urlrep_list(
 
 
 async def urlrep_get(
-    settings: Settings, exception_type: str, exception_str: str,
+    settings: Settings,
+    exception_type: str,
+    exception_str: str,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Get a single URL-reputation exception."""
@@ -41,7 +42,9 @@ async def urlrep_get(
 
 
 async def urlrep_create(
-    settings: Settings, exception_type: str, fields: dict[str, Any],
+    settings: Settings,
+    exception_type: str,
+    fields: dict[str, Any],
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Create a URL-reputation exception. ``fields`` must include ``exception_str``;
@@ -50,7 +53,10 @@ async def urlrep_create(
     _validate_type("urlrep", exception_type, _URLREP_TYPES)
     # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
     # cannot bypass _validate_type by overriding the path-bearing value.
-    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
+    request_data = {
+        "exception_type": exception_type,
+        **{k: v for k, v in fields.items() if k != "exception_type"},
+    }
     async with acquire_client(settings, client) as c:
         return await c.post(
             "/v1.0/sectool-exceptions/avanan_url",
@@ -60,7 +66,9 @@ async def urlrep_create(
 
 
 async def urlrep_update(
-    settings: Settings, exception_type: str, fields: dict[str, Any],
+    settings: Settings,
+    exception_type: str,
+    fields: dict[str, Any],
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Update a URL-reputation exception. ``fields`` must include ``exception_str`` and
@@ -68,7 +76,10 @@ async def urlrep_update(
     _validate_type("urlrep", exception_type, _URLREP_TYPES)
     # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
     # cannot bypass _validate_type by overriding the path-bearing value.
-    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
+    request_data = {
+        "exception_type": exception_type,
+        **{k: v for k, v in fields.items() if k != "exception_type"},
+    }
     async with acquire_client(settings, client) as c:
         return await c.put(
             "/v1.0/sectool-exceptions/avanan_url",
@@ -78,7 +89,9 @@ async def urlrep_update(
 
 
 async def urlrep_delete(
-    settings: Settings, exception_type: str, exception_str: str,
+    settings: Settings,
+    exception_type: str,
+    exception_str: str,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Delete one URL-reputation exception by (type, str)."""
@@ -86,12 +99,18 @@ async def urlrep_delete(
     async with acquire_client(settings, client) as c:
         return await c.delete(
             "/v1.0/sectool-exceptions/avanan_url/exceptions",
-            json={"requestData": {"exception_type": exception_type, "exception_str_list": [exception_str]}},
+            json={
+                "requestData": {
+                    "exception_type": exception_type,
+                    "exception_str_list": [exception_str],
+                }
+            },
             bucket="exceptions_other",
         )
 
 
 # -- DLP (/v1.0/sectool-exceptions/avanan_dlp) --
+
 
 async def dlp_list(
     settings: Settings, exception_type: str, client: HarmonyClient | None = None
@@ -104,7 +123,9 @@ async def dlp_list(
 
 
 async def dlp_get(
-    settings: Settings, exception_type: str, exception_str: str,
+    settings: Settings,
+    exception_type: str,
+    exception_str: str,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Get a single DLP exception."""
@@ -116,14 +137,19 @@ async def dlp_get(
 
 
 async def dlp_create(
-    settings: Settings, exception_type: str, fields: dict[str, Any],
+    settings: Settings,
+    exception_type: str,
+    fields: dict[str, Any],
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Create a DLP exception. ``fields`` must include ``exception_str``."""
     _validate_type("dlp", exception_type, _DLP_TYPES)
     # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
     # cannot bypass _validate_type by overriding the path-bearing value.
-    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
+    request_data = {
+        "exception_type": exception_type,
+        **{k: v for k, v in fields.items() if k != "exception_type"},
+    }
     async with acquire_client(settings, client) as c:
         return await c.post(
             "/v1.0/sectool-exceptions/avanan_dlp",
@@ -133,7 +159,9 @@ async def dlp_create(
 
 
 async def dlp_update(
-    settings: Settings, exception_type: str, fields: dict[str, Any],
+    settings: Settings,
+    exception_type: str,
+    fields: dict[str, Any],
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Update a DLP exception. ``fields`` must include ``exception_str`` and may
@@ -141,7 +169,10 @@ async def dlp_update(
     _validate_type("dlp", exception_type, _DLP_TYPES)
     # Validated kwarg wins: drop any caller-supplied "exception_type" in fields so it
     # cannot bypass _validate_type by overriding the path-bearing value.
-    request_data = {"exception_type": exception_type, **{k: v for k, v in fields.items() if k != "exception_type"}}
+    request_data = {
+        "exception_type": exception_type,
+        **{k: v for k, v in fields.items() if k != "exception_type"},
+    }
     async with acquire_client(settings, client) as c:
         return await c.put(
             "/v1.0/sectool-exceptions/avanan_dlp",
@@ -151,7 +182,9 @@ async def dlp_update(
 
 
 async def dlp_delete(
-    settings: Settings, exception_type: str, exception_str: str,
+    settings: Settings,
+    exception_type: str,
+    exception_str: str,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Delete one DLP exception by (type, str)."""
@@ -159,7 +192,12 @@ async def dlp_delete(
     async with acquire_client(settings, client) as c:
         return await c.delete(
             "/v1.0/sectool-exceptions/avanan_dlp/exceptions",
-            json={"requestData": {"exception_type": exception_type, "exception_str_list": [exception_str]}},
+            json={
+                "requestData": {
+                    "exception_type": exception_type,
+                    "exception_str_list": [exception_str],
+                }
+            },
             bucket="exceptions_other",
         )
 

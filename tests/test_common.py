@@ -70,9 +70,16 @@ def test_record_matches_and_semantics():
 
 
 def test_normalize_task_status():
-    inprog = {"responseData": {"actions": [{"action_name": "Q", "action_status": "completed", "action_message": "ok"}], "status": "inprogress"}}
+    inprog = {
+        "responseData": {
+            "actions": [{"action_name": "Q", "action_status": "completed", "action_message": "ok"}],
+            "status": "inprogress",
+        }
+    }
     assert normalize_task_status(inprog)["status"] == "completed"
-    failed = {"responseData": {"actions": [{"action_status": "completed"}, {"action_status": "failed"}]}}
+    failed = {
+        "responseData": {"actions": [{"action_status": "completed"}, {"action_status": "failed"}]}
+    }
     assert normalize_task_status(failed)["status"] == "failed"
     pending = {"responseData": {"actions": [{"action_status": "init"}]}}
     assert normalize_task_status(pending)["status"] == "inprogress"

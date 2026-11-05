@@ -36,8 +36,15 @@ def _compact_entity(entity: dict[str, Any]) -> dict[str, Any]:
     for k in ("entityId", "saasEntityType", "entityActionState"):
         if k in info:
             out[k] = info[k]
-    for k in ("subject", "fromEmail", "fromDomain", "recipients", "received",
-              "isQuarantined", "SpfResult"):
+    for k in (
+        "subject",
+        "fromEmail",
+        "fromDomain",
+        "recipients",
+        "received",
+        "isQuarantined",
+        "SpfResult",
+    ):
         if k in payload:
             out[k] = payload[k]
     if "combinedVerdict" in sec:
@@ -54,7 +61,9 @@ async def entities_get_by_id(
 
 
 async def entities_download(
-    settings: Settings, entity_id: str, original: bool = False,
+    settings: Settings,
+    entity_id: str,
+    original: bool = False,
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Download a secured-entity email as RFC822 (.eml). Returns
@@ -110,11 +119,18 @@ async def entities_query(
             resp = await c.post("/v1.0/search/query", json={"requestData": request_data})
             hist: dict[str, int] = {}
             for ent in resp.get("responseData") or []:
-                v = ((ent.get("entitySecurityResult") or {}).get("combinedVerdict") or {}).get("ap") or "unknown"
+                v = ((ent.get("entitySecurityResult") or {}).get("combinedVerdict") or {}).get(
+                    "ap"
+                ) or "unknown"
                 hist[v] = hist.get(v, 0) + 1
-            return {"recordsNumber": (resp.get("responseEnvelope") or {}).get("recordsNumber"), "histogram": hist}
+            return {
+                "recordsNumber": (resp.get("responseEnvelope") or {}).get("recordsNumber"),
+                "histogram": hist,
+            }
         if max_records is not None:
-            records, env, truncated = await paginate(c, "/v1.0/search/query", request_data, max_records)
+            records, env, truncated = await paginate(
+                c, "/v1.0/search/query", request_data, max_records
+            )
             data = records if full else [_compact_entity(r) for r in records]
             out = {"responseEnvelope": env, "responseData": data}
             if truncated:
@@ -156,8 +172,12 @@ async def entities_find(
             resp = await c.get(f"/v1.0/search/entity/{entity_id}")
         rows = resp.get("responseData") or []
         matches = rows if full else [_compact_entity(r) for r in rows]
-        return {"matches": matches[:limit], "matchMode": "exact",
-                "totalInWindow": len(rows), "truncated": False}
+        return {
+            "matches": matches[:limit],
+            "matchMode": "exact",
+            "totalInWindow": len(rows),
+            "truncated": False,
+        }
 
     ent_filter: dict[str, Any] = {"saas": saas, "startDate": default_window(start_date)}
     if end_date:
@@ -179,8 +199,11 @@ async def entities_find(
 
     def _build(relax: bool) -> list[dict[str, Any]]:
         return [
-            {"saasAttrName": name, "saasAttrValue": value,
-             "saasAttrOp": "contains" if (relax and exact_op == "is") else exact_op}
+            {
+                "saasAttrName": name,
+                "saasAttrValue": value,
+                "saasAttrOp": "contains" if (relax and exact_op == "is") else exact_op,
+            }
             for name, value, exact_op in specs
         ]
 
@@ -254,9 +277,13 @@ async def entities_action(
                 "entityActionState": info.get("entityActionState"),
             }
         return {
-            "taskId": task_id, "status": norm["status"], "message": norm.get("message"),
-            "finalState": final_state, "finalStateSettled": norm["status"] == "completed",
-            "timedOut": norm.get("timedOut", False), "raw": resp,
+            "taskId": task_id,
+            "status": norm["status"],
+            "message": norm.get("message"),
+            "finalState": final_state,
+            "finalStateSettled": norm["status"] == "completed",
+            "timedOut": norm.get("timedOut", False),
+            "raw": resp,
         }
 
 
@@ -274,46 +301,81 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="entities_query")
     async def _entities_query(
-        entity_filter: dict[str, Any], extended_filter: list[dict[str, Any]] | None = None,
-        scroll_id: str | None = None, limit: int = 25, full: bool = False,
-        max_records: int | None = None, count_only: bool = False,
+        entity_filter: dict[str, Any],
+        extended_filter: list[dict[str, Any]] | None = None,
+        scroll_id: str | None = None,
+        limit: int = 25,
+        full: bool = False,
+        max_records: int | None = None,
+        count_only: bool = False,
     ) -> dict[str, Any]:
         """Search entities (entity_filter requires saas + startDate). Returns up to `limit`
         compact records, or `max_records` (cap 500) to auto-paginate, or `count_only=True`
         for {recordsNumber, histogram}. `full=True` for raw objects."""
         return await entities_query(
-            settings, entity_filter, extended_filter, scroll_id,
-            limit=limit, full=full, max_records=max_records, count_only=count_only, client=client,
+            settings,
+            entity_filter,
+            extended_filter,
+            scroll_id,
+            limit=limit,
+            full=full,
+            max_records=max_records,
+            count_only=count_only,
+            client=client,
         )
 
     @app.tool(name="entities_find")
     async def _entities_find(
-        message_id: str | None = None, sender: str | None = None,
-        recipient: str | None = None, subject_contains: str | None = None,
-        entity_id: str | None = None, saas: str = "office365_emails",
-        start_date: str | None = None, end_date: str | None = None,
-        limit: int = 25, max_records: int = 100, full: bool = False,
+        message_id: str | None = None,
+        sender: str | None = None,
+        recipient: str | None = None,
+        subject_contains: str | None = None,
+        entity_id: str | None = None,
+        saas: str = "office365_emails",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 25,
+        max_records: int = 100,
+        full: bool = False,
     ) -> dict[str, Any]:
         """Locate a specific email/entity by sender, recipient, subject, or message-ID.
         Filters server-side and auto-relaxes exact->contains; defaults to the last 30 days
         when start_date is omitted. Returns matches + {matchMode, totalInWindow, truncated}."""
         return await entities_find(
-            settings, message_id=message_id, sender=sender, recipient=recipient,
-            subject_contains=subject_contains, entity_id=entity_id, saas=saas,
-            start_date=start_date, end_date=end_date, limit=limit, max_records=max_records,
-            full=full, client=client,
+            settings,
+            message_id=message_id,
+            sender=sender,
+            recipient=recipient,
+            subject_contains=subject_contains,
+            entity_id=entity_id,
+            saas=saas,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            max_records=max_records,
+            full=full,
+            client=client,
         )
 
     @app.tool(name="entities_action")
     async def _entities_action(
-        entity_ids: list[str], entity_type: str, entity_action_name: str,
+        entity_ids: list[str],
+        entity_type: str,
+        entity_action_name: str,
         entity_action_param: Any = None,
-        wait: bool = True, timeout: int = 60,
+        wait: bool = True,
+        timeout: int = 60,
     ) -> dict[str, Any]:
         """Quarantine/restore one or more entities. entity_type is required (the entity's
         saasEntityType, e.g. office365_emails_email, from entities_query/entities_find).
         Waits by default; multi-ID returns tasks+summary, single-ID returns finalState."""
         return await entities_action(
-            settings, entity_ids, entity_type, entity_action_name, entity_action_param,
-            wait=wait, timeout=timeout, client=client,
+            settings,
+            entity_ids,
+            entity_type,
+            entity_action_name,
+            entity_action_param,
+            wait=wait,
+            timeout=timeout,
+            client=client,
         )

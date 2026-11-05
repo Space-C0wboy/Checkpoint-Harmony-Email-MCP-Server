@@ -29,7 +29,9 @@ async def exceptions_get(
 
 
 async def exceptions_create(
-    settings: Settings, exc_type: str, fields: dict[str, Any],
+    settings: Settings,
+    exc_type: str,
+    fields: dict[str, Any],
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Create an exception. `fields` are the documented body fields (senderEmail,
@@ -45,7 +47,10 @@ async def exceptions_create(
 
 
 async def exceptions_update(
-    settings: Settings, exc_type: str, exc_id: str, fields: dict[str, Any],
+    settings: Settings,
+    exc_type: str,
+    exc_id: str,
+    fields: dict[str, Any],
     client: HarmonyClient | None = None,
 ) -> dict[str, Any]:
     """Update an existing exception by type and ID."""
@@ -90,7 +95,9 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
         return await exceptions_create(settings, exc_type, fields, client=client)
 
     @app.tool(name="exceptions_update")
-    async def _exceptions_update(exc_type: str, exc_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    async def _exceptions_update(
+        exc_type: str, exc_id: str, fields: dict[str, Any]
+    ) -> dict[str, Any]:
         """Update an existing exception by type and ID."""
         return await exceptions_update(settings, exc_type, exc_id, fields, client=client)
 

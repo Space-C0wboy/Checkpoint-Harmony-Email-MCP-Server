@@ -16,8 +16,17 @@ from ._common import (
 )
 
 _EVENT_FIELDS = (
-    "eventId", "type", "severity", "state", "confidenceIndicator", "eventCreated",
-    "saas", "senderAddress", "description", "entityId", "entityLink",
+    "eventId",
+    "type",
+    "severity",
+    "state",
+    "confidenceIndicator",
+    "eventCreated",
+    "saas",
+    "senderAddress",
+    "description",
+    "entityId",
+    "entityLink",
 )
 
 
@@ -52,7 +61,9 @@ async def events_query(
     governs the returned count (overrides `limit`). `count_only=True` returns
     {recordsNumber, histogram} with no records. `full=True` returns raw event objects."""
     if not filters.get("startDate"):
-        raise HarmonyError("events require a date range: set startDate (and ideally endDate) in filters")
+        raise HarmonyError(
+            "events require a date range: set startDate (and ideally endDate) in filters"
+        )
     async with acquire_client(settings, client) as c:
         if count_only:
             resp = await c.post("/v1.0/event/query", json={"requestData": filters})
@@ -60,7 +71,10 @@ async def events_query(
             for ev in resp.get("responseData") or []:
                 t = ev.get("type") or "unknown"
                 hist[t] = hist.get(t, 0) + 1
-            return {"recordsNumber": (resp.get("responseEnvelope") or {}).get("recordsNumber"), "histogram": hist}
+            return {
+                "recordsNumber": (resp.get("responseEnvelope") or {}).get("recordsNumber"),
+                "histogram": hist,
+            }
         if max_records is not None:
             records, env, truncated = await paginate(c, "/v1.0/event/query", filters, max_records)
             data = records if full else [_compact_event(r) for r in records]
@@ -126,7 +140,9 @@ async def events_find(
                 if sender:
                     comps.append((ev.get("senderAddress"), sender, sender_mode))
                 if text_contains:
-                    comps.append((clean_description(ev.get("description")), text_contains, "contains"))
+                    comps.append(
+                        (clean_description(ev.get("description")), text_contains, "contains")
+                    )
                 if entity_id:
                     comps.append((ev.get("entityId"), entity_id, "exact"))
                 if event_id:
@@ -162,8 +178,14 @@ async def events_find(
         # No sender relaxation applies. Report "exact" only for exact-identifier matches
         # (event_id/entity_id); a text_contains-only match is inherently substring.
         mode = "exact" if (event_id or entity_id) else "contains"
-    return {"matches": matches, "matchMode": mode, "pagesScanned": pages,
-            "scanCapHit": scan_cap_hit, "totalInWindow": total, "truncated": limit_hit or scan_cap_hit}
+    return {
+        "matches": matches,
+        "matchMode": mode,
+        "pagesScanned": pages,
+        "scanCapHit": scan_cap_hit,
+        "totalInWindow": total,
+        "truncated": limit_hit or scan_cap_hit,
+    }
 
 
 async def events_action(
@@ -219,9 +241,13 @@ async def events_action(
             }
             settled = norm["status"] == "completed"
         return {
-            "taskId": task_id, "status": norm["status"], "message": norm.get("message"),
-            "finalState": final_state, "finalStateSettled": settled,
-            "timedOut": norm.get("timedOut", False), "raw": resp,
+            "taskId": task_id,
+            "status": norm["status"],
+            "message": norm.get("message"),
+            "finalState": final_state,
+            "finalStateSettled": settled,
+            "timedOut": norm.get("timedOut", False),
+            "raw": resp,
         }
 
 
@@ -242,47 +268,75 @@ def register(app, settings: Settings, client: HarmonyClient | None = None) -> No
 
     @app.tool(name="events_query")
     async def _events_query(
-        filters: dict[str, Any], limit: int = 25, full: bool = False,
-        max_records: int | None = None, count_only: bool = False,
+        filters: dict[str, Any],
+        limit: int = 25,
+        full: bool = False,
+        max_records: int | None = None,
+        count_only: bool = False,
     ) -> dict[str, Any]:
         """Query security events (requires startDate in filters). Returns up to `limit`
         compact records, or set `max_records` (cap 500) to auto-paginate, or
         `count_only=True` for {recordsNumber, histogram}. `full=True` for raw objects."""
         return await events_query(
-            settings, filters, limit=limit, full=full,
-            max_records=max_records, count_only=count_only, client=client,
+            settings,
+            filters,
+            limit=limit,
+            full=full,
+            max_records=max_records,
+            count_only=count_only,
+            client=client,
         )
 
     @app.tool(name="events_find")
     async def _events_find(
-        sender: str | None = None, text_contains: str | None = None,
-        entity_id: str | None = None, event_id: str | None = None,
-        start_date: str | None = None, end_date: str | None = None,
-        max_pages: int = 20, limit: int = 25, full: bool = False,
+        sender: str | None = None,
+        text_contains: str | None = None,
+        entity_id: str | None = None,
+        event_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_pages: int = 20,
+        limit: int = 25,
+        full: bool = False,
     ) -> dict[str, Any]:
         """Find events by sender/text_contains/entity_id/event_id. Narrows server-side
         then refines (auto-relaxes exact->contains for sender); defaults to the last 30
         days. `limit` (default 25) caps matches. Returns matches +
         {matchMode, pagesScanned, scanCapHit, totalInWindow, truncated}."""
         return await events_find(
-            settings, sender=sender, text_contains=text_contains, entity_id=entity_id,
-            event_id=event_id, start_date=start_date, end_date=end_date,
-            max_pages=max_pages, limit=limit, full=full, client=client,
+            settings,
+            sender=sender,
+            text_contains=text_contains,
+            entity_id=entity_id,
+            event_id=event_id,
+            start_date=start_date,
+            end_date=end_date,
+            max_pages=max_pages,
+            limit=limit,
+            full=full,
+            client=client,
         )
 
     @app.tool(name="events_action")
     async def _events_action(
-        event_ids: list[str], event_action_name: str,
+        event_ids: list[str],
+        event_action_name: str,
         event_action_param: Any = None,
-        wait: bool = True, timeout: int = 60,
+        wait: bool = True,
+        timeout: int = 60,
     ) -> dict[str, Any]:
         """Act on one or more events. Verbs: quarantine, restore, dismiss, severityChange,
         senttoadmin. For severityChange pass event_action_param as
         {"newSeverity": "Low|Medium|High|Highest"}. Waits for completion by default
         (multi-ID returns tasks+summary; single-ID returns finalState). wait=false for fire-and-forget."""
         return await events_action(
-            settings, event_ids, event_action_name, event_action_param,
-            wait=wait, timeout=timeout, client=client,
+            settings,
+            event_ids,
+            event_action_name,
+            event_action_param,
+            wait=wait,
+            timeout=timeout,
+            client=client,
         )
 
     @app.tool(name="events_get_task_status")
