@@ -34,7 +34,7 @@ Issues = "https://github.com/Space-C0wboy/Checkpoint-Harmony-Email-MCP-Server/is
 checkpoint-harmony-mcp = "checkpoint_harmony_mcp.server:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21", "ruff==0.17.3"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21", "ruff==0.17.4"]
 
 [build-system]
 requires = ["hatchling"]
